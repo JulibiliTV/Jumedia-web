@@ -1,3 +1,4 @@
+import { userFace } from './render'
 import { type Archive, type ArchiveField, type ArchiveOrigin, av2bv, type DataSource, type DataSourceLibrary, type DB, type Page, type Region, save } from './db'
 
 /**
@@ -390,7 +391,7 @@ export function dataSourceJSON(db: DB, ds: DataSource) {
   const { password, ...rest } = ds
   const u = db.users.find((x) => x.mid === ds.mid)
   return {
-    ...rest, has_password: !!password, owner: { mid: ds.mid, name: u?.uname ?? '已注销用户', face: u?.face ?? '' },
+    ...rest, has_password: !!password, owner: { mid: ds.mid, name: u?.uname ?? '已注销用户', face: userFace(ds.mid, u?.face) },
     archives: db.archives.filter((a) => a.origin?.ds === ds.id && a.state !== -100 && a.state !== -6).length,
   }
 }

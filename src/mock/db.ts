@@ -344,7 +344,7 @@ export function seed(): DB {
   setDemoPackage()
   const fresh: DB = {
     version: VERSION, seq: 1000,
-    users: [{ mid: 1, username: 'jumedia', password: 'admin123', uname: '聚媒管理员', face: '/mock/avatars/u1.png', sign: '', sex: '保密', birthday: '', email: '', level: 0, exp: 0, coins: 0, role: 'admin', status: 0, ctime: now(), top_photo: '', vip: 0 }],
+    users: [{ mid: 1, username: 'jumedia', password: 'admin123', uname: '聚媒管理员', face: avatarURL(1), sign: '', sex: '保密', birthday: '', email: '', level: 0, exp: 0, coins: 0, role: 'admin', status: 0, ctime: now(), top_photo: '', vip: 0 }],
     sessions: [], archives: [], collections: [], seasons: [], regions: structuredClone(REGIONS), dataSources: [],
     liveAreas: structuredClone(LIVE_AREAS), rooms: [], liveMessages: [], replies: [], danmaku: [], seededDanmaku: [],
     relations: [], likes: [], dislikes: [], coins: [], favFolders: [], history: [], historyPaused: [], toview: [],
@@ -415,6 +415,7 @@ export function getDB(): DB {
       if (parsed.version === 16) upgrade16(parsed)
       if (parsed.version === 17) upgrade17(parsed)
       if (parsed.version === VERSION) {
+        for (const u of parsed.users) if (!u.face) u.face = avatarURL(u.mid)
         const base = seed()
         for (const region of base.regions) if (!parsed.regions.some((r) => r.tid === region.tid)) parsed.regions.push(region)
         for (const area of base.liveAreas) {
@@ -631,6 +632,7 @@ export function save() {
 export function resetDB() {
   const admins = getDB().users.filter((u) => u.role === 'admin')
   db = seed()
+  for (const u of admins) if (!u.face) u.face = avatarURL(u.mid)
   db.users = admins
   db.settings.officialMid = admins[0]?.mid ?? 0
   db.seq = Math.max(1000, ...admins.map((u) => u.mid))

@@ -1,5 +1,7 @@
 import { formatDuration } from '../api/normalize'
-import { type Archive, type Collection, type DB, type LiveRoom, type Reply, type Season, type User, getDB } from './db'
+import { type Archive, type Collection, type DB, type LiveRoom, type Reply, type Season, type User, avatarURL, getDB } from './db'
+
+export const userFace = (mid: number, face?: string | null) => face || avatarURL(mid)
 
 // Renders stored records into the response shapes Juli parses.
 
@@ -12,7 +14,7 @@ export const followingCount = (mid: number) => getDB().relations.filter((r) => r
 
 export function owner(mid: number) {
   const u = userById(mid)
-  return { mid, name: u?.uname ?? '已注销用户', face: u?.face ?? '' }
+  return { mid, name: u?.uname ?? '已注销用户', face: userFace(mid, u?.face) }
 }
 
 export function levelInfo(u: User) {
@@ -21,7 +23,7 @@ export function levelInfo(u: User) {
 
 export function memberJSON(mid: number) {
   const u = userById(mid)
-  return { mid: String(mid), uname: u?.uname ?? '已注销用户', avatar: u?.face ?? '', sex: u?.sex ?? '保密', sign: u?.sign ?? '', level_info: u ? levelInfo(u) : { current_level: 0 }, vip: { vipStatus: u?.vip ?? 0, vipType: u?.vip ? 2 : 0 } }
+  return { mid: String(mid), uname: u?.uname ?? '已注销用户', avatar: userFace(mid, u?.face), sex: u?.sex ?? '保密', sign: u?.sign ?? '', level_info: u ? levelInfo(u) : { current_level: 0 }, vip: { vipStatus: u?.vip ?? 0, vipType: u?.vip ? 2 : 0 } }
 }
 
 const totalDuration = (a: Archive) => a.pages.reduce((s, p) => s + p.duration, 0)

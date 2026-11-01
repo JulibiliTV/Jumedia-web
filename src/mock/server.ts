@@ -5,7 +5,7 @@ import { dataSourceJSON, dsHlsPath, dsPlaylist, embyBase, forgetSession, mediaFo
 import { embyHlsPath, embyPlaylist, loadEmby, parseDemoPackage } from './emby'
 import { cacheDir, cacheJSON, cacheKeyOf, cachePath, ensureCache, findCache, notReady, retryCache, roomCache, tickCaches, TRANSCODE_HEIGHTS } from './liveCache'
 import { liveWindow, parsePlaylist, passthrough, type Playlist, relayMaster } from './hlsRelay'
-import { archiveById, arcView, compactCount, feedCard, followerCount, followingCount, indexShow, levelInfo, owner, published, regionName, replyJSON, roomCard, seasonBadge, seasonCard, spaceArc, userById } from './render'
+import { archiveById, arcView, compactCount, feedCard, followerCount, followingCount, indexShow, levelInfo, owner, published, regionName, replyJSON, roomCard, seasonBadge, seasonCard, spaceArc, userById, userFace } from './render'
 
 /**
  * In-browser implementation of the Jumedia API, installed over `fetch` while
@@ -92,7 +92,7 @@ function searchVideo(a: Archive, kw: string) {
   return { type: 'video', id: a.aid, aid: a.aid, bvid: a.bvid, title: em(a.title, kw), pic: a.pic, author: owner(a.mid).name, mid: a.mid, upic: owner(a.mid).face, play: a.stat.view, video_review: a.stat.danmaku, favorites: a.stat.favorite, duration: formatDuration(a.pages.reduce((s, p) => s + p.duration, 0)), pubdate: a.pubdate, description: a.desc, tag: a.tag, typename: regionName(a.tid) }
 }
 function searchUser(u: User) {
-  return { type: 'bili_user', mid: u.mid, uname: u.uname, usign: u.sign, upic: u.face, fans: followerCount(u.mid), videos: getDB().archives.filter((a) => a.mid === u.mid && a.state === 0).length, level: u.level }
+  return { type: 'bili_user', mid: u.mid, uname: u.uname, usign: u.sign, upic: userFace(u.mid, u.face), fans: followerCount(u.mid), videos: getDB().archives.filter((a) => a.mid === u.mid && a.state === 0).length, level: u.level }
 }
 
 /** `format` is `mp4` for media `<video>` plays; data-source files it cannot play carry their container (`mkv`…) for the libmedia player. */
@@ -147,7 +147,7 @@ function seasonResult(c: Ctx, s: DB['seasons'][number]) {
 function adminUser(u: User) {
   const { password: _password, ...rest } = u
   void _password
-  return { ...rest, archives: getDB().archives.filter((a) => a.mid === u.mid).length, follower: followerCount(u.mid) }
+  return { ...rest, face: userFace(u.mid, u.face), archives: getDB().archives.filter((a) => a.mid === u.mid).length, follower: followerCount(u.mid) }
 }
 
 function creatorRow(a: Archive) {
@@ -376,7 +376,7 @@ const routes: Record<string, Handler> = {
     const wbi_img = { img_url: `${c.origin}/bfs/wbi/7cd084941338484aae1ad9425b84077c.png`, sub_url: `${c.origin}/bfs/wbi/4932caff0ff746eab6f01bf08b70ac45.png` }
     if (!c.me) fail(-101, '账号未登录', { isLogin: false, wbi_img })
     const u = c.me!
-    return { isLogin: true, mid: u.mid, uname: u.uname, face: u.face, level_info: levelInfo(u), money: u.coins, moral: 70, email_verified: 1, mobile_verified: 0, vipStatus: u.vip, vipType: u.vip ? 2 : 0, vip_label: { text: u.vip ? '年度大会员' : '' }, official: { type: -1 }, wbi_img, role: u.role, sign: u.sign }
+    return { isLogin: true, mid: u.mid, uname: u.uname, face: userFace(u.mid, u.face), level_info: levelInfo(u), money: u.coins, moral: 70, email_verified: 1, mobile_verified: 0, vipStatus: u.vip, vipType: u.vip ? 2 : 0, vip_label: { text: u.vip ? '年度大会员' : '' }, official: { type: -1 }, wbi_img, role: u.role, sign: u.sign }
   },
   '/x/v2/feed/index': (c) => {
     const idx = int(c.p.idx)
@@ -522,7 +522,7 @@ const routes: Record<string, Handler> = {
     const related = published(c.db).filter((x) => x.aid !== a.aid).sort((x, y) => (x.tid === a.tid ? -1 : 0) - (y.tid === a.tid ? -1 : 0) || y.stat.view - x.stat.view).slice(0, 12)
     const following = !!c.me && c.db.relations.some((r) => r.mid === c.me!.mid && r.fid === a.mid)
     return {
-      View: arcView(a), Card: { card: { mid: String(u.mid), name: u.uname, face: u.face, sign: u.sign, fans: followerCount(u.mid), attention: followingCount(u.mid), level_info: levelInfo(u) }, following, archive_count: c.db.archives.filter((x) => x.mid === u.mid && x.state === 0).length, follower: followerCount(u.mid), like_num: 0 },
+      View: arcView(a), Card: { card: { mid: String(u.mid), name: u.uname, face: userFace(u.mid, u.face), sign: u.sign, fans: followerCount(u.mid), attention: followingCount(u.mid), level_info: levelInfo(u) }, following, archive_count: c.db.archives.filter((x) => x.mid === u.mid && x.state === 0).length, follower: followerCount(u.mid), like_num: 0 },
       Tags: a.tag.split(',').filter(Boolean).map((t, i) => ({ tag_id: i + 1, tag_name: t })), Related: related.map((x) => arcView(x)),
     }
   },
@@ -724,7 +724,7 @@ const routes: Record<string, Handler> = {
     const filtered = kw ? rows.filter((r) => searchMatch(r.a.title, kw)) : rows
     const u = userById(f.mid)!
     return {
-      info: { id: f.id, fid: f.id, mid: f.mid, title: f.title, intro: f.intro, cover: filtered[0]?.a.pic ?? '', media_count: f.items.length, privacy: f.privacy, upper: { mid: u.mid, name: u.uname, face: u.face }, ctime: f.ctime },
+      info: { id: f.id, fid: f.id, mid: f.mid, title: f.title, intro: f.intro, cover: filtered[0]?.a.pic ?? '', media_count: f.items.length, privacy: f.privacy, upper: { mid: u.mid, name: u.uname, face: userFace(u.mid, u.face) }, ctime: f.ctime },
       medias: page(filtered, pn, ps).map(({ i, a }) => ({ id: a.aid, type: 2, title: a.state === 0 ? a.title : '已失效视频', cover: a.pic, intro: a.desc, duration: a.pages.reduce((s, p) => s + p.duration, 0), upper: owner(a.mid), attr: a.state === 0 ? 0 : 9, cnt_info: { collect: a.stat.favorite, play: a.stat.view, danmaku: a.stat.danmaku }, bvid: a.bvid, bv_id: a.bvid, pubtime: a.pubdate, fav_time: i.mtime, ugc: { first_cid: a.pages[0]?.cid } })),
       has_more: pn * ps < filtered.length,
     }
@@ -757,12 +757,12 @@ const routes: Record<string, Handler> = {
     const vmid = int(c.p.vmid)
     const rows = c.db.relations.filter((r) => r.mid === vmid).sort((a, b) => b.mtime - a.mtime)
     const pn = int(c.p.pn, 1), ps = int(c.p.ps, 50)
-    return { total: rows.length, list: page(rows, pn, ps).map((r) => { const u = userById(r.fid); return { mid: r.fid, uname: u?.uname ?? '', face: u?.face ?? '', sign: u?.sign ?? '', mtime: r.mtime, attribute: c.db.relations.some((x) => x.mid === r.fid && x.fid === vmid) ? 6 : 2 } }) }
+    return { total: rows.length, list: page(rows, pn, ps).map((r) => { const u = userById(r.fid); return { mid: r.fid, uname: u?.uname ?? '', face: userFace(r.fid, u?.face), sign: u?.sign ?? '', mtime: r.mtime, attribute: c.db.relations.some((x) => x.mid === r.fid && x.fid === vmid) ? 6 : 2 } }) }
   },
   '/x/space/wbi/acc/info': (c) => {
     const u = userById(int(c.p.mid))
     if (!u) return fail(-404, '啥都木有')
-    return { mid: u.mid, name: u.uname, sex: u.sex, face: u.face, jointime: u.ctime, sign: u.sign, level: u.level, birthday: u.birthday.slice(5), top_photo: u.top_photo, is_followed: !!c.me && c.db.relations.some((r) => r.mid === c.me!.mid && r.fid === u.mid), silence: u.status, vip: { status: u.vip, label: { text: u.vip ? '年度大会员' : '' } }, official: { role: u.role === 'admin' ? 1 : 0, title: u.role === 'admin' ? 'Jumedia 官方账号' : '' }, live_room: liveRoomOf(c.db, u.mid) }
+    return { mid: u.mid, name: u.uname, sex: u.sex, face: userFace(u.mid, u.face), jointime: u.ctime, sign: u.sign, level: u.level, birthday: u.birthday.slice(5), top_photo: u.top_photo, is_followed: !!c.me && c.db.relations.some((r) => r.mid === c.me!.mid && r.fid === u.mid), silence: u.status, vip: { status: u.vip, label: { text: u.vip ? '年度大会员' : '' } }, official: { role: u.role === 'admin' ? 1 : 0, title: u.role === 'admin' ? 'Jumedia 官方账号' : '' }, live_room: liveRoomOf(c.db, u.mid) }
   },
   '/x/space/wbi/acc/relation': (c) => {
     const mid = int(c.p.mid)
@@ -775,7 +775,7 @@ const routes: Record<string, Handler> = {
     const u = userById(int(c.p.mid))
     if (!u) return fail(-404, '啥都木有')
     const likes = c.db.archives.filter((a) => a.mid === u.mid).reduce((s, a) => s + a.stat.like, 0)
-    return { card: { mid: String(u.mid), name: u.uname, face: u.face, sign: u.sign, sex: u.sex, fans: followerCount(u.mid), attention: followingCount(u.mid), level_info: levelInfo(u) }, space: { s_img: u.top_photo, l_img: u.top_photo }, following: !!c.me && c.db.relations.some((r) => r.mid === c.me!.mid && r.fid === u.mid), archive_count: c.db.archives.filter((a) => a.mid === u.mid && a.state === 0).length, follower: followerCount(u.mid), like_num: likes }
+    return { card: { mid: String(u.mid), name: u.uname, face: userFace(u.mid, u.face), sign: u.sign, sex: u.sex, fans: followerCount(u.mid), attention: followingCount(u.mid), level_info: levelInfo(u) }, space: { s_img: u.top_photo, l_img: u.top_photo }, following: !!c.me && c.db.relations.some((r) => r.mid === c.me!.mid && r.fid === u.mid), archive_count: c.db.archives.filter((a) => a.mid === u.mid && a.state === 0).length, follower: followerCount(u.mid), like_num: likes }
   },
   '/x/space/wbi/arc/search': (c) => {
     const mid = int(c.p.mid), pn = int(c.p.pn, 1), ps = int(c.p.ps, 30), kw = c.p.keyword ?? ''
@@ -937,7 +937,7 @@ const routes: Record<string, Handler> = {
     return { uid: r.uid, room_id: r.room_id, short_id: 0, title: r.title, user_cover: r.cover, keyframe: r.cover, live_status: r.live_status, online: r.online, area_id: r.area_id, area_name: card.area_v2_name, parent_area_id: r.parent_area_id, parent_area_name: card.area_v2_parent_name, description: r.description, tags: r.tags, live_time: r.live_time ? new Date(r.live_time * 1000).toISOString().replace('T', ' ').slice(0, 19) : '0000-00-00 00:00:00', attention: followerCount(r.uid) }
   },
   '/room/v1/Room/room_init': (c) => { const r = room(c, int(c.p.id)); return { room_id: r.room_id, short_id: 0, uid: r.uid, live_status: r.live_status, live_time: r.live_time, is_locked: r.banned } },
-  '/live_user/v1/Master/info': (c) => { const u = userById(int(c.p.uid)); return { info: { uid: u?.mid ?? 0, uname: u?.uname ?? '', face: u?.face ?? '', gender: 0, official_verify: { type: -1, desc: '' } }, follower_num: followerCount(u?.mid ?? 0), room_id: c.db.rooms.find((r) => r.uid === u?.mid)?.room_id ?? 0, room_news: { content: '' } } },
+  '/live_user/v1/Master/info': (c) => { const u = userById(int(c.p.uid)); return { info: { uid: u?.mid ?? 0, uname: u?.uname ?? '', face: userFace(int(c.p.uid), u?.face), gender: 0, official_verify: { type: -1, desc: '' } }, follower_num: followerCount(u?.mid ?? 0), room_id: c.db.rooms.find((r) => r.uid === u?.mid)?.room_id ?? 0, room_news: { content: '' } } },
   '/xlive/web-room/v2/index/getRoomPlayInfo': async (c) => {
     const r = room(c, int(c.p.room_id))
     const relayed = r.source?.type === 'm3u8' || r.source?.type === 'video'
@@ -967,11 +967,11 @@ const routes: Record<string, Handler> = {
     const r = room(c, rid)
     if (r.live_status === 1 && Math.random() < 0.7) c.db.liveMessages.push({ id: nextID(), room_id: rid, uid: 1 + Math.floor(Math.random() * c.db.users.length), text: LIVE_CHATTER[Math.floor(Math.random() * LIVE_CHATTER.length)], ts: ts() })
     const rows = c.db.liveMessages.filter((m) => m.room_id === rid && !m.price).slice(-30)
-    return { admin: [], room: rows.map((m) => { const u = userById(m.uid); return { text: m.text, uid: m.uid, nickname: u?.uname ?? '观众', timeline: new Date(m.ts * 1000).toISOString().replace('T', ' ').slice(0, 19), id_str: String(m.id), check_info: { ts: m.ts }, user: { uid: m.uid, base: { name: u?.uname ?? '观众', face: u?.face ?? '' }, medal: wornMedal(c.db, m.uid) ?? null }, medal_info: null } }) }
+    return { admin: [], room: rows.map((m) => { const u = userById(m.uid); return { text: m.text, uid: m.uid, nickname: u?.uname ?? '观众', timeline: new Date(m.ts * 1000).toISOString().replace('T', ' ').slice(0, 19), id_str: String(m.id), check_info: { ts: m.ts }, user: { uid: m.uid, base: { name: u?.uname ?? '观众', face: userFace(m.uid, u?.face) }, medal: wornMedal(c.db, m.uid) ?? null }, medal_info: null } }) }
   },
   '/av/v1/SuperChat/getMessageList': (c) => {
     const rid = int(c.p.room_id)
-    return { list: c.db.liveMessages.filter((m) => m.room_id === rid && m.price).map((m) => { const u = userById(m.uid); return { id: m.id, uid: m.uid, message: m.text, price: m.price, background_bottom_color: '#2A60B2', background_color: '#EDF5FF', start_time: m.ts, end_time: m.ts + 120 + (m.price ?? 0) * 4, time: 120, user_info: { uname: u?.uname ?? '', face: u?.face ?? '' } } }) }
+    return { list: c.db.liveMessages.filter((m) => m.room_id === rid && m.price).map((m) => { const u = userById(m.uid); return { id: m.id, uid: m.uid, message: m.text, price: m.price, background_bottom_color: '#2A60B2', background_color: '#EDF5FF', start_time: m.ts, end_time: m.ts + 120 + (m.price ?? 0) * 4, time: 120, user_info: { uname: u?.uname ?? '', face: userFace(m.uid, u?.face) } } }) }
   },
   '/msg/send': (c) => {
     const u = csrf(c)
@@ -1195,8 +1195,8 @@ const routes: Record<string, Handler> = {
     const live = ups.map((x) => c.db.rooms.find((r) => r.uid === x.mid && r.live_status === 1 && !r.banned)).filter((r): r is LiveRoom => !!r)
     return {
       live_users: { count: live.length, group: '', items: live.map((r) => ({ mid: r.uid, uname: owner(r.uid).name, face: owner(r.uid).face, room_id: r.room_id, title: r.title, jump_url: `/live/${r.room_id}`, is_reserve_recall: false })) },
-      my_info: { mid: u.mid, name: u.uname, face: u.face, follower: followerCount(u.mid), following: followingCount(u.mid), dyns: published(c.db).filter((a) => a.mid === u.mid).length },
-      up_list: { has_more: false, items: ups.map((x) => ({ mid: x.mid, uname: x.uname, face: x.face, has_update: published(c.db).some((a) => a.mid === x.mid && a.pubdate >= since), is_reserve_recall: false })) },
+      my_info: { mid: u.mid, name: u.uname, face: userFace(u.mid, u.face), follower: followerCount(u.mid), following: followingCount(u.mid), dyns: published(c.db).filter((a) => a.mid === u.mid).length },
+      up_list: { has_more: false, items: ups.map((x) => ({ mid: x.mid, uname: x.uname, face: userFace(x.mid, x.face), has_update: published(c.db).some((a) => a.mid === x.mid && a.pubdate >= since), is_reserve_recall: false })) },
     }
   },
   '/x/web-interface/online': (c) => {
