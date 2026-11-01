@@ -1,0 +1,36 @@
+/* 管理后台页面的作用域（外框与前台一致：顶栏 + ConsoleNav） */
+.admin { min-width: 0; }
+.admin-side { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #111214; color: #c9ccd1; padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; }
+.admin-side .wordmark { color: #fff; padding: 4px 10px 18px; }
+.admin-side .group { font-size: 11.5px; color: #6c7078; padding: 14px 12px 6px; font-weight: 600; letter-spacing: 0.5px; }
+.admin-side a { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 9px; color: #b4b8bf; font-weight: 500; }
+.admin-side a:hover { background: #1e2024; color: #fff; }
+.admin-side a.active { background: var(--brand); color: #fff; }
+.admin-side a .count { margin-left: auto; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; display: grid; place-items: center; }
+.admin-side .foot { margin-top: auto; padding-top: 16px; }
+.admin-top { position: sticky; top: 0; z-index: 50; height: 60px; display: flex; align-items: center; gap: 14px; padding: 0 28px; background: var(--overlay); backdrop-filter: blur(16px); border-bottom: 1px solid var(--line); }
+.admin-top h2 { font-size: 17px; font-weight: 700; }
+.admin-main { padding: 24px 28px 48px; min-width: 0; }
+.admin .toolbar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.admin .toolbar-row .input, .admin .toolbar-row .select { width: auto; min-width: 160px; }
+.admin .cell-media { display: flex; align-items: center; gap: 12px; min-width: 240px; }
+.admin .cell-media img { width: 96px; aspect-ratio: 16 / 10; border-radius: 6px; object-fit: cover; flex: none; }
+/* `.poster` is also the site-wide poster card (a column); in a table cell the cover sits beside the title. */
+.admin .cell-media.poster { flex-direction: row; gap: 12px; }
+.admin .cell-media.poster img { width: 42px; height: 56px; aspect-ratio: auto; }
+.admin .cell-media.poster .t { font-size: 14px; }
+.admin .cell-media .t { font-weight: 600; }
+.admin .cell-media .s { font-size: 12px; color: var(--text-3); }
+.audit { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.audit-queue { display: flex; flex-direction: column; gap: 8px; }
+.audit-item { display: flex; gap: 12px; padding: 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); cursor: pointer; text-align: left; }
+.audit-item.on { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.audit-item img { width: 120px; aspect-ratio: 16 / 10; border-radius: 8px; object-fit: cover; }
+.audit-preview { position: sticky; top: 84px; }
+.audit-preview video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; }
+.ep-editor { display: grid; grid-template-columns: 56px 1fr 1fr 110px 150px 36px 36px; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ep-editor .ep-extra { grid-column: 1 / -1; display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 12px; border-radius: 10px; background: var(--bg); }
+.ep-editor .btn.icon.on { color: var(--brand); }
+.dash-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 1100px) { .dash-grid, .audit { grid-template-columns: 1fr; } .audit-preview { position: static; } }
+@media (max-width: 860px) { .admin { grid-template-columns: 1fr; } .admin-side { position: static; height: auto; flex-direction: row; overflow-x: auto; } .admin-side .group, .admin-side .foot, .admin-side .wordmark { display: none; } .admin-side a { flex: none; } .admin-main { padding: 16px; } .ep-editor { grid-template-columns: 1fr 1fr; } }

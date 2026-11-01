@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jumedia Logo 方案</title>
+<style>
+  :root { --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 var(--font); background: #f2f3f5; color: #18191c; }
+  header { padding: 28px 32px 8px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: #61666d; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 20px 32px 40px; }
+  .opt { background: #fff; border-radius: 18px; overflow: hidden; border: 1px solid #e3e5e8; }
+  .opt .head { display: flex; align-items: baseline; gap: 10px; padding: 16px 20px 0; }
+  .opt .head b { font-size: 18px; }
+  .opt .head span { color: #61666d; font-size: 13px; }
+  .stage { display: grid; grid-template-columns: 1fr 1fr; margin-top: 12px; }
+  .side { padding: 26px 20px; display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .side.dark { background: #0e0f11; color: #fff; }
+  .side.light { color: #000; }
+  .big svg { width: 120px; height: 120px; display: block; }
+  .lockup { display: flex; align-items: center; gap: 12px; font-family: 'Avenir Next', 'SF Pro Rounded', ui-rounded, var(--font); font-weight: 800; font-size: 34px; letter-spacing: -1.5px; line-height: 1; }
+  .lockup svg { width: 44px; height: 44px; }
+  .sizes { display: flex; align-items: center; gap: 16px; }
+  .bar { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border-radius: 10px; font-family: 'Avenir Next', ui-rounded, var(--font); font-weight: 800; font-size: 17px; letter-spacing: -0.6px; }
+  .light .bar { background: #f5f6f8; }
+  .dark .bar { background: #1b1c20; }
+  .bar i { flex: 1; height: 22px; border-radius: 11px; background: currentColor; opacity: 0.08; margin-left: 12px; }
+  .bar svg { width: 24px; height: 24px; }
+  .note { padding: 0 20px 18px; color: #61666d; font-size: 13px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<header><h1>Jumedia Logo 方案</h1><p>四个方向，均为纯黑 / 纯白单色；每个方案展示大尺寸、横版组合、16–48px 小尺寸和网站顶栏效果。</p></header>
+<div class="grid" id="grid"></div>
+<script>
+  const square = 'M20 2h24c9.9 0 18 8.1 18 18v24c0 9.9-8.1 18-18 18H20C10.1 62 2 53.9 2 44V20C2 10.1 10.1 2 20 2z'
+  let n = 0
+  // fill: shapes in currentColor; cut: shapes knocked out; after: raw mask markup drawn last
+  const knock = (fill, cut, after = '') => {
+    const id = 'k' + ++n
+    return `<svg viewBox="0 0 64 64"><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">${fill.map((d) => `<path d="${d}" fill="#fff"/>`).join('')}${cut.map((d) => `<path d="${d}" fill="#000"/>`).join('')}${after}</mask><rect width="64" height="64" fill="currentColor" mask="url(#${id})"/></svg>`
+  }
+  const options = [
+    {
+      key: 'A', name: '聚流', sub: '三股流汇聚成播放键',
+      note: '“聚”的意象：三条内容流从左侧汇入，在箭头尖端合为一点。圆角方块容器，适合 App 图标与网站 favicon。',
+      svg: () => knock([square], ['M23.2 15.6c-1.8-1.1-4.2.2-4.2 2.4v28c0 2.2 2.4 3.5 4.2 2.4l22.6-14c1.8-1.1 1.8-3.7 0-4.8z'], '<path d="M14 22.9v4.6L39.4 31.3z" fill="#fff"/><path d="M14 41.1v-4.6l25.4-3.8z" fill="#fff"/>'),
+    },
+    {
+      key: 'B', name: '跃动的 j', sub: '首字母 j，圆点化作播放键',
+      note: '字母 j 的笔画留白在方块中，顶部的点替换为播放三角，识别度强、字母化，便于与 Ju- 系列产品统一。',
+      svg: () => knock([square], ['M29.4 9.9c-1.3-.8-3 .1-3 1.7v9.2c0 1.6 1.7 2.5 3 1.7l7.4-4.6c1.3-.8 1.3-2.6 0-3.4z'], '<path d="M34 28v13.5a9.5 9.5 0 0 1-9.5 9.5H21" fill="none" stroke="#000" stroke-width="8.5" stroke-linecap="round"/>'),
+    },
+    {
+      key: 'C', name: '三点成播', sub: '三个圆点围出一个播放键',
+      note: '三个点代表聚在一起的创作者、观众与内容，排成三角即暗示“播放”。无容器，轻盈现代；小尺寸下三点依然清晰。',
+      svg: () => `<svg viewBox="0 0 64 64"><g fill="currentColor"><circle cx="20.5" cy="16.5" r="12"/><circle cx="20.5" cy="47.5" r="12"/><circle cx="47.5" cy="32" r="12"/></g></svg>`,
+    },
+    {
+      key: 'D', name: '弹幕气泡', sub: '对话气泡里的播放键',
+      note: '把“视频 + 互动”放进一个图形：气泡代表弹幕与评论，中间是播放键。语义最直接，强调社区属性。',
+      svg: () => knock(['M18 5h28c8.8 0 16 7.2 16 16v18c0 8.8-7.2 16-16 16H24l-11.3 7.6c-1.3.9-3.1-.1-3-1.7l.6-7.4C5.5 50.6 2 45.2 2 39V21C2 12.2 9.2 5 18 5z'], ['M27 19.6c-1.6-1-3.6.2-3.6 2v16.8c0 1.8 2 3 3.6 2l13.6-8.4c1.5-.9 1.5-3.1 0-4z']),
+    },
+  ]
+  const grid = document.getElementById('grid')
+  for (const o of options) {
+    const side = (cls) => `<div class="side ${cls}">
+      <div class="big">${o.svg()}</div>
+      <div class="lockup">${o.svg()}<span>jumedia</span></div>
+      <div class="sizes">${[16, 24, 32, 48].map((s) => o.svg().replace('<svg ', `<svg width="${s}" height="${s}" `)).join('')}</div>
+      <div class="bar">${o.svg()}<span>jumedia</span><i></i></div></div>`
+    grid.insertAdjacentHTML('beforeend', `<section class="opt"><div class="head"><b>方案 ${o.key} · ${o.name}</b><span>${o.sub}</span></div><div class="stage">${side('light')}${side('dark')}</div><p class="note">${o.note}</p></section>`)
+  }
+</script>
+</body>
+</html>
