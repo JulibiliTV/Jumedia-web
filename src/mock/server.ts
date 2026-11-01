@@ -1,8 +1,8 @@
 import { formatDuration } from '../api/normalize'
 import { Writer } from '../api/protobuf'
-import { type Archive, type ArchiveField, type Banner, type CollectionField, type DataSource, type DB, type LiveRoom, type StreamSource, type User, av2bv, avatarURL, bv2av, getDB, LIVE_CHATTER, nextID, putFile, resetDB, resolveMedia, save, seedDanmaku } from './db'
+import { type Archive, type ArchiveField, type Banner, type CollectionField, type DataSource, type DB, type LiveRoom, type StreamSource, type User, av2bv, avatarURL, bv2av, getDB, importDemo, LIVE_CHATTER, nextID, putFile, resetDB, resolveMedia, save, seedDanmaku } from './db'
 import { dataSourceJSON, dsHlsPath, dsPlaylist, embyBase, forgetSession, mediaFormat, originJSON, parseDsRef, privateHost, probeSource, purgeSource, setSourceFetcher, SourceError, syncSource } from './datasource'
-import { embyHlsPath, embyPlaylist, loadEmby } from './emby'
+import { embyHlsPath, embyPlaylist, loadEmby, parseDemoPackage } from './emby'
 import { cacheDir, cacheJSON, cacheKeyOf, cachePath, ensureCache, findCache, notReady, retryCache, roomCache, tickCaches, TRANSCODE_HEIGHTS } from './liveCache'
 import { liveWindow, parsePlaylist, passthrough, type Playlist, relayMaster } from './hlsRelay'
 import { archiveById, arcView, compactCount, feedCard, followerCount, followingCount, indexShow, levelInfo, owner, published, regionName, replyJSON, roomCard, seasonBadge, seasonCard, spaceArc, userById } from './render'
@@ -1573,11 +1573,21 @@ const routes: Record<string, Handler> = {
         { key: 'JUMEDIA_DATA_DIR', label: '数据目录', value: 'data' },
         { key: 'JUMEDIA_WEB_DIR', label: '网页目录', value: '' },
         { key: 'JUMEDIA_STATIC_DIR', label: '静态资源目录', value: '../Jumedia-web/public' },
-        { key: 'JUMEDIA_SEED', label: '空库写入演示数据', value: '是' },
         { key: 'JUMEDIA_DATASOURCE_KEY', label: '数据源密钥', value: '未设置' },
       ],
       startup: { publicOrigin: '', ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', videoEncoder: 'libx264' },
     }
+  },
+  '/x/admin/demo/import': async (c) => {
+    admin(c); csrf(c)
+    if (c.method !== 'POST') fail(-400, '请使用 POST 上传演示数据包')
+    const file = c.form?.get('file')
+    if (!(file instanceof File)) fail(-400, '请选择演示数据包文件')
+    if ((file as File).size > 32 * 1024 * 1024) fail(-400, '演示数据包格式无效')
+    try { importDemo(parseDemoPackage(await (file as File).text())) } catch (e) { fail(-400, e instanceof Error ? e.message : '演示数据包格式无效') }
+    queueRelayedCaches(getDB())
+    await loadEmby(nativeFetch)
+    return null
   },
   '/x/admin/settings/save': (c) => {
     admin(c)
@@ -1864,7 +1874,7 @@ function saveArchive(c: Ctx, u: User, existing: Archive | undefined, over: { tit
   let a = existing
   if (a) Object.assign(a, fields, over.pubdate ? { pubdate: over.pubdate } : {})
   else {
-    const aid = Math.max(...c.db.archives.map((x) => x.aid)) + 1
+    const aid = Math.max(100000, ...c.db.archives.map((x) => x.aid)) + 1
     a = { aid, bvid: av2bv(aid), mid: u.mid, ctime: ts(), pubdate: over.pubdate, stat: { view: 0, danmaku: 0, reply: 0, favorite: 0, coin: 0, share: 0, like: 0 }, subtitles: [], ...fields }
     c.db.archives.push(a)
   }
@@ -2109,6 +2119,7 @@ export async function installMockServer() {
   const native = window.fetch.bind(window)
   nativeFetch = native
   setSourceFetcher(native)
+  getDB()
   await loadEmby(native)
   // A reload interrupts in-flight syncs (the server marks them the same way on start-up).
   for (const ds of getDB().dataSources) if (ds.status === 'syncing') Object.assign(ds, { status: 'error', message: '同步被中断，请重新同步' })

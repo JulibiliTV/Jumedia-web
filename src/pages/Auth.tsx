@@ -50,7 +50,7 @@ export function Login() {
           <div className="field"><label htmlFor="p">密码</label><input id="p" type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></div>
           <button className="btn primary lg block" disabled={busy}>{busy ? <Spinner size={16} /> : '登录'}</button>
           <div className="switch-line">还没有账号？<Link to="/register">立即注册</Link></div>
-          {import.meta.env.VITE_MOCK !== '0' && <div className="demo">演示环境：管理员 <b>jumedia</b> / admin123，普通用户 <b>lumen</b> / demo123</div>}
+          {import.meta.env.VITE_MOCK !== '0' && <div className="demo">Mock 管理员：<b>jumedia</b> / admin123；演示内容需在后台导入数据包</div>}
         </form>
       </div>
     </div>

@@ -15,9 +15,45 @@ export interface CatalogEpisode { id: string; sourceId: string; container: strin
 export interface CatalogImages { primary: string | null; backdrop: string | null; thumb: string | null }
 export interface CatalogSeries { id: string; library: string; name: string; overview: string; year: number; genres: string[]; countries: string[]; studios: string[]; rating: number; ended: boolean; airDays: string[]; airTime: string; premiere: number; images: CatalogImages; episodes: CatalogEpisode[] }
 export interface CatalogMovie { id: string; sourceId: string; container: string; width: number; height: number; library: string; name: string; overview: string; year: number; genres: string[]; countries: string[]; rating: number; runtime: number; premiere: number; images: CatalogImages }
-export interface Catalog { server: string; username: string; generatedAt: number; series: CatalogSeries[]; movies: CatalogMovie[] }
+export interface Catalog { series: CatalogSeries[]; movies: CatalogMovie[] }
 
-let catalog: Catalog = { server: '', username: '', generatedAt: 0, series: [], movies: [] }
+export interface DemoPackage { format: 'jumedia-demo'; version: 1; generatedAt: number; emby: { url: string; username: string; password?: string }; catalog: Catalog }
+let catalog: Catalog = { series: [], movies: [] }
+let connection = { url: '', username: '', password: '' }
+export function setDemoPackage(pack?: DemoPackage) {
+  catalog = pack?.catalog ?? { series: [], movies: [] }
+  const url = (pack?.emby.url ?? '').replace(/\/+$/, '')
+  connection = { url: url && !url.endsWith('/emby') ? url + '/emby' : url, username: pack?.emby.username ?? '', password: pack?.emby.password ?? '' }
+  token = ''; sessions.clear()
+}
+export function parseDemoPackage(text: string): DemoPackage {
+  let p: DemoPackage
+  try { p = JSON.parse(text) } catch { throw new Error('演示数据包格式无效') }
+  if (!p || p.format !== 'jumedia-demo') throw new Error('演示数据包格式无效')
+  if (p.version !== 1) throw new Error('不支持的演示数据包版本')
+  if (!p.catalog || !Array.isArray(p.catalog.series) || !Array.isArray(p.catalog.movies) || !p.catalog.series.length && !p.catalog.movies.length) throw new Error('演示数据包 catalog 为空或无效')
+  let url: URL
+  try { url = new URL(p.emby.url) } catch { throw new Error('演示 Emby 连接信息无效') }
+  if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password || url.search || url.hash || typeof p.emby.username !== 'string' || (p.emby.password !== undefined && typeof p.emby.password !== 'string')) throw new Error('演示 Emby 连接信息无效')
+  const invalid = (): never => { throw new Error('演示数据包格式无效') }
+  const str = (v: unknown) => v == null ? '' : typeof v === 'string' ? v : invalid()
+  const num = (v: unknown) => v == null ? 0 : typeof v === 'number' && Number.isFinite(v) ? v : invalid()
+  const list = (v: unknown): string[] => v == null ? [] : Array.isArray(v) && v.every((x) => typeof x === 'string') ? v : invalid()
+  const images = (v: CatalogImages): CatalogImages => ({ primary: v?.primary == null ? null : str(v.primary), backdrop: v?.backdrop == null ? null : str(v.backdrop), thumb: v?.thumb == null ? null : str(v.thumb) })
+  const metadata = <T extends CatalogMovie | CatalogSeries>(x: T): T => ({ ...x, name: str(x.name), library: str(x.library), overview: str(x.overview), year: num(x.year), premiere: num(x.premiere), rating: num(x.rating), genres: list(x.genres), countries: list(x.countries), images: images(x.images) })
+  const item = <T extends CatalogEpisode | CatalogMovie>(x: T): T => {
+    if (!x || typeof x.id !== 'string' || typeof x.sourceId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(x.id) || !/^[A-Za-z0-9_-]+$/.test(x.sourceId)) throw new Error('演示数据包 catalog 无效')
+    return { ...x, name: str(x.name), overview: str(x.overview), runtime: num(x.runtime), premiere: num(x.premiere), container: str(x.container), width: num(x.width), height: num(x.height) }
+  }
+  p.generatedAt = num(p.generatedAt)
+  p.catalog.movies = p.catalog.movies.map((m) => metadata(item(m)))
+  p.catalog.series = p.catalog.series.map((s) => {
+    if (!s || !Array.isArray(s.episodes) || !s.episodes.length) throw new Error('演示数据包 catalog 无效')
+    if (s.ended != null && typeof s.ended !== 'boolean') invalid()
+    return { ...metadata(s), id: str(s.id), ended: s.ended ?? false, studios: list(s.studios), airDays: list(s.airDays), airTime: str(s.airTime), episodes: s.episodes.map((e) => ({ ...item(e), season: num(e.season), index: num(e.index), image: e.image == null ? null : str(e.image) })) }
+  })
+  return p
+}
 let token = ''
 const DEVICE = 'jumedia-web-mock'
 
@@ -25,20 +61,17 @@ export const getCatalog = () => catalog
 export const embyRef = (itemId: string, sourceId: string) => `emby:${itemId}:${sourceId}`
 export const embyHlsPath = (itemId: string, sourceId: string) => `/media/emby/${itemId}/hls/index.m3u8?source=${encodeURIComponent(sourceId)}`
 
-/** Loads the catalog and signs in to Emby with the account it was built from. */
+/** Sign in using the connection from the persisted imported package. */
 export async function loadEmby(fetcher: typeof fetch) {
+  const current = connection
+  if (!current.url) return
   try {
-    const res = await fetcher('/mock/emby/catalog.json')
-    if (res.ok) catalog = await res.json()
-  } catch { /* no catalog: the mock still runs, without demo media */ }
-  if (!catalog.server) return
-  try {
-    const auth = await fetcher(`${catalog.server}/Users/AuthenticateByName`, {
+    const auth = await fetcher(`${current.url}/Users/AuthenticateByName`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Emby-Authorization': `MediaBrowser Client="Jumedia", Device="Jumedia Web", DeviceId="${DEVICE}", Version="0.1.0"` },
-      body: JSON.stringify({ Username: catalog.username, Pw: (import.meta.env.VITE_EMBY_PASSWORD as string | undefined) ?? '' }),
+      body: JSON.stringify({ Username: current.username, Pw: current.password }),
     }).then((r) => r.json())
-    token = auth.AccessToken ?? ''
+    if (connection === current) token = auth.AccessToken ?? ''
   } catch (e) {
     console.warn('[mock] Emby 登录失败，视频将无法播放', e)
   }
@@ -47,14 +80,14 @@ export async function loadEmby(fetcher: typeof fetch) {
 /** Progressive MP4 for `emby:{item}:{source}`. */
 export function embyStreamURL(ref: string): string {
   const [, item, source] = ref.split(':')
-  return `${catalog.server}/Videos/${item}/stream.mp4?Static=true&MediaSourceId=${encodeURIComponent(source)}&DeviceId=${DEVICE}&api_key=${token}`
+  return `${connection.url}/Videos/${item}/stream.mp4?Static=true&MediaSourceId=${encodeURIComponent(source)}&DeviceId=${DEVICE}&api_key=${token}`
 }
 
 const sessions = new Map<string, Promise<string>>()
 function playSession(fetcher: typeof fetch, item: string, source: string) {
   const key = item + ':' + source
   if (!sessions.has(key)) {
-    sessions.set(key, fetcher(`${catalog.server}/Items/${item}/PlaybackInfo?MediaSourceId=${encodeURIComponent(source)}&api_key=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    sessions.set(key, fetcher(`${connection.url}/Items/${item}/PlaybackInfo?MediaSourceId=${encodeURIComponent(source)}&api_key=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then((r) => r.json()).then((d) => d.PlaySessionId as string)
       .catch((e) => { sessions.delete(key); throw e }))
   }
@@ -68,18 +101,18 @@ function playSession(fetcher: typeof fetch, item: string, source: string) {
  */
 export async function embyPlaylist(fetcher: typeof fetch, path: string, source: string): Promise<string | null> {
   const m = /^\/media\/emby\/([^/]+)\/hls\/(index|main)\.m3u8$/.exec(path)
-  if (!m || !catalog.server || !token) return null
+  if (!m || !connection.url || !token) return null
   const [, item, kind] = m
   if (kind === 'index') {
     return `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=5000000,CODECS="avc1.640028,mp4a.40.2"\nmain.m3u8?source=${encodeURIComponent(source)}\n`
   }
   const session = await playSession(fetcher, item, source)
   const query = `MediaSourceId=${encodeURIComponent(source)}&VideoCodec=h264&AudioCodec=aac&DeviceId=${DEVICE}&PlaySessionId=${session}&api_key=${token}`
-  const text = await fetcher(`${catalog.server}/Videos/${item}/main.m3u8?${query}`).then((r) => r.text())
+  const text = await fetcher(`${connection.url}/Videos/${item}/main.m3u8?${query}`).then((r) => r.text())
   return text.split('\n').map((line) => {
     const t = line.trim()
     if (!t || t.startsWith('#')) return line
     const base = t.split('?')[0]
-    return `${catalog.server}/Videos/${item}/${base}?${query}`
+    return `${connection.url}/Videos/${item}/${base}?${query}`
   }).join('\n')
 }

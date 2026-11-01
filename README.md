@@ -21,14 +21,13 @@ npm install
 npm run dev
 ```
 
-打开 <http://localhost:8790>。默认启用 Mock 服务，数据保存在浏览器的 localStorage，上传的视频保存在 IndexedDB；在管理后台「站点设置」中可以重置演示数据。
+打开 <http://localhost:8790>。默认启用 Mock 服务，数据保存在浏览器的 localStorage，上传的视频保存在 IndexedDB；初始只有基础分区、设置和管理员账号，没有演示内容。在管理后台「站点设置」中可导入演示数据包或重置为初始状态。重置删除所有内容、保留全部管理员账号，IndexedDB 上传文件不删除。
 
-Mock 演示账号：
+Mock 引导账号（仅浏览器 Mock 内置）：
 
 | 账号 | 密码 | 角色 |
 | --- | --- | --- |
 | `jumedia` | `admin123` | 管理员 |
-| `lumen` | `demo123` | 普通用户 |
 
 ## 连接后端
 
@@ -57,7 +56,6 @@ VITE_MOCK=0 npm run build
 | `VITE_API_BASE` | 同源 | 所有接口的基础地址 |
 | `VITE_API_HOST` / `VITE_APP_HOST` / `VITE_PASSPORT_HOST` / `VITE_LIVE_HOST` | `VITE_API_BASE` | 分别指定主站、客户端、登录、直播接口的地址，用于分布式部署 |
 | `VITE_LIBMEDIA_WASM` | jsDelivr | libmedia 解码器 WebAssembly 文件的地址，可指向自托管副本 |
-| `VITE_EMBY_PASSWORD` | 空 | 仅 Mock 模式：演示媒体所在 Emby 账号的密码 |
 
 `VITE_*` 变量在构建时写入产物，修改后需要重新构建。
 
@@ -69,13 +67,17 @@ VITE_MOCK=0 npm run build
 
 ## 演示媒体
 
-Mock 模式和后端的演示数据都使用 Emby 媒体库中的视频与图片，目录文件为 `public/mock/emby/catalog.json`。可以用自己的 Emby 服务器重新生成：
+演示内容只通过 `jumedia-demo` v1 JSON 数据包导入，不随应用初始化写入。使用自己的 Emby 生成数据包：
 
 ```sh
-EMBY_URL=https://emby.example.com EMBY_USER=<用户名> EMBY_PASSWORD=<密码> node scripts/import-emby.mjs
+EMBY_URL=https://emby.example.test EMBY_USER=demo EMBY_PASSWORD='<密码>' node scripts/import-emby.mjs ./jumedia-demo.json
 ```
 
-脚本只收录浏览器和电视都能直接播放的条目（MP4 / M4V / MOV，H.264 + AAC/MP3），图片使用 Emby 的公开地址，不会把访问令牌写入文件。重新生成后，在管理后台重置演示数据即可使用新内容。用户头像为 `public/mock/avatars/` 下的静态图片。
+`EMBY_URL` 必填，`EMBY_USER` / `EMBY_PASSWORD` 从环境变量读取。第一个命令行参数为输出路径，默认为 `./jumedia-demo.json`，`jumedia-demo*.json` 已被 Git 忽略。默认不将密码写入文件；需要随包携带密码时设置 `DEMO_INCLUDE_PASSWORD=1`。脚本只收录 MP4 / M4V / MOV、H.264 + AAC/MP3 的可直播放条目，图片引用 Emby 地址，不复制媒体或保存访问令牌。
+
+登录后台，在「站点设置」选择「导入演示数据包」。仅允许基础数据和管理员账号的初始状态导入，已有内容时需先重置。导入保留站点设置和真实管理员；生成的普通演示账号统一使用 `demo123`，用户名带 `demo_<mid>_` 前缀，可在用户管理页查看。
+
+Mock 的 Emby 地址、用户名和密码随包保存在浏览器 DB，包中未含密码时按空密码连接。真实服务端使用数据源密钥加密密码，并代理媒体请求；Mock 直接连接 Emby，需要源站允许跨域。用户头像仍使用 `public/mock/avatars/` 下的静态图片。
 
 ## 目录结构
 

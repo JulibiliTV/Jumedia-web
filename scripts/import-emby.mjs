@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// Builds public/mock/emby/catalog.json from an Emby server. Both the browser mock
-// and Jumedia-server seed their demo content from this file.
+// Builds a portable jumedia-demo JSON package for explicit admin import.
 //
 //   EMBY_URL=https://emby.example.test EMBY_USER=test EMBY_PASSWORD= node scripts/import-emby.mjs
 //
@@ -8,17 +7,17 @@
 // browsers and JulibiliTV can play them without transcoding. Images are referenced
 // by Emby's public image URLs; no media is copied and no token is written.
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
 
-const root = (process.env.EMBY_URL ?? 'https://emby.example.test').replace(/\/+$/, '')
+if (!process.env.EMBY_URL?.trim()) throw new Error('EMBY_URL is required')
+const root = process.env.EMBY_URL.replace(/\/+$/, '')
 const server = root.endsWith('/emby') ? root : root + '/emby'
-const username = process.env.EMBY_USER ?? 'test'
+const username = process.env.EMBY_USER ?? ''
 const password = process.env.EMBY_PASSWORD ?? ''
 const MAX_SERIES = Number(process.env.EMBY_MAX_SERIES ?? 36)
 const MAX_EPISODES = Number(process.env.EMBY_MAX_EPISODES ?? 16)
 const MAX_MOVIES = Number(process.env.EMBY_MAX_MOVIES ?? 24)
-const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'mock', 'emby', 'catalog.json')
+const out = process.argv[2] ?? './jumedia-demo.json'
 
 const authHeader = 'MediaBrowser Client="Jumedia Importer", Device="Jumedia", DeviceId="jumedia-importer", Version="0.1.0"'
 async function api(path, init = {}) {
@@ -56,7 +55,7 @@ const images = (it, posterWidth = 480) => ({
 
 const views = (await api(`/Users/${uid}/Views`)).Items
 const libraryOf = (view) => ({ tvshows: view.Name, movies: view.Name })[view.CollectionType]
-const catalog = { server, username, generatedAt: Math.floor(Date.now() / 1000), series: [], movies: [] }
+const catalog = { series: [], movies: [] }
 
 for (const view of views) {
   if (view.CollectionType === 'tvshows') {
@@ -103,6 +102,6 @@ catalog.series = mixed.slice(0, MAX_SERIES)
 catalog.movies = catalog.movies.filter((m) => m.images.backdrop || m.images.thumb).slice(0, MAX_MOVIES)
 
 await mkdir(dirname(out), { recursive: true })
-await writeFile(out, JSON.stringify(catalog, null, 1) + '\n')
+await writeFile(out, JSON.stringify({ format: 'jumedia-demo', version: 1, generatedAt: Math.floor(Date.now() / 1000), emby: { url: server, username, ...(process.env.DEMO_INCLUDE_PASSWORD === '1' ? { password } : {}) }, catalog }, null, 1) + '\n')
 const eps = catalog.series.reduce((n, s) => n + s.episodes.length, 0)
 console.log(`\nwrote ${out}\n  ${catalog.series.length} series (${eps} episodes), ${catalog.movies.length} movies; libraries: ${Object.entries(byLibrary).map(([k, v]) => `${k} ${v.length}`).join(', ')}`)

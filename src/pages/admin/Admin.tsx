@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { resolveAssetURL } from '../../lib/assets'
+import { post } from '../../api/client'
 import { admin } from '../../api/jumedia'
 import * as jm from '../../api/jumedia'
 import * as juli from '../../api/juli'
@@ -662,9 +663,19 @@ export function SiteSettings() {
   const norm = (v: unknown) => (v == null || v === false ? '' : String(v))
   const dirty = Object.keys(f).filter((k) => norm(f[k]) !== norm(saved?.[k])).length
   const save = async () => { try { const r = await admin.settingsSave(f); if (r.code) throw new Error(r.message); setSaved(f); d.reload(); toast('设置已保存', 'success') } catch (e) { toastError(e) } }
+  const importPackage = async (file?: File) => {
+    if (!file) return
+    try {
+      const body = new FormData(); body.append('file', file)
+      body.append('csrf', decodeURIComponent(document.cookie.split('; ').find((x) => x.startsWith('bili_jct='))?.slice(9) ?? ''))
+      const result = await post('api', '/x/admin/demo/import', {}, { body })
+      if (result.code) throw new Error(result.message)
+      toast('演示数据包导入成功', 'success'); d.reload(); caches.reload()
+    } catch (e) { toastError(e) }
+  }
   const reset = async () => {
-    if (!(await confirmDialog('将清除全部演示数据（含上传文件记录）并恢复初始状态，确定吗？', { danger: true, ok: '重置' }))) return
-    await admin.settingsSave({ reset: true }); for (const k of ['SESSDATA', 'bili_jct', 'DedeUserID']) document.cookie = `${k}=; path=/; max-age=0`; nav('/'); location.reload()
+    if (!(await confirmDialog('将删除所有内容、保留全部管理员账号，并恢复初始状态。上传文件不删除，确定吗？', { danger: true, ok: '重置' }))) return
+    const result = await admin.settingsSave({ reset: true }); if (result.code) { toast(result.message, 'error'); return } for (const k of ['SESSDATA', 'bili_jct', 'DedeUserID']) document.cookie = `${k}=; path=/; max-age=0`; nav('/'); location.reload()
   }
   return (
     <div className="stack" style={{ gap: 16 }}>
@@ -723,7 +734,7 @@ export function SiteSettings() {
       </div>
       <ServiceSettings f={f} setF={setF} />
       <ServerSettings f={f} setF={setF} />
-      <div className="row" style={{ gap: 12, paddingTop: 4 }}><button type="button" className="aud-btn no" style={{ flex: 'none', height: 40, padding: '0 16px', fontWeight: 500 }} onClick={reset}><Icon name="refresh" size={15} />重置演示数据</button><span className="grow" />{dirty > 0 && <span className="muted" style={{ fontSize: 13 }}>有 {dirty} 项未保存的修改</span>}<button type="button" className="aud-btn ok" style={{ flex: 'none', padding: '0 24px' }} onClick={save}>保存设置</button></div>
+      <div className="row" style={{ gap: 12, paddingTop: 4 }}><button type="button" className="aud-btn no" style={{ flex: 'none', height: 40, padding: '0 16px', fontWeight: 500 }} onClick={reset}><Icon name="refresh" size={15} />重置为初始状态</button><label className="btn">导入演示数据包<input type="file" accept=".json,application/json" hidden onChange={(e) => { void importPackage(e.target.files?.[0]); e.target.value = '' }} /></label><span className="grow" />{dirty > 0 && <span className="muted" style={{ fontSize: 13 }}>有 {dirty} 项未保存的修改</span>}<button type="button" className="aud-btn ok" style={{ flex: 'none', padding: '0 24px' }} onClick={save}>保存设置</button></div>
     </div>
   )
 }

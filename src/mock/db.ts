@@ -1,5 +1,5 @@
 import { dsMediaURL } from './datasource'
-import { type Catalog, type CatalogImages, type CatalogSeries, embyHlsPath, embyRef, embyStreamURL, getCatalog } from './emby'
+import { type Catalog, type CatalogImages, type CatalogSeries, embyHlsPath, embyRef, embyStreamURL, getCatalog, setDemoPackage, type DemoPackage } from './emby'
 
 /**
  * Storage model for the in-browser mock server. Records are kept in their
@@ -90,6 +90,7 @@ export interface Reservation { sid: number; mid: number; title: string; stime: n
 export interface FanMedal { medal_id: number; mid: number; ruid: number; intimacy: number; today: number; day: number; wearing: boolean; ctime: number }
 
 export interface DB {
+  demoPackage?: DemoPackage
   version: number; seq: number
   users: User[]; sessions: { token: string; csrf: string; access: string; refresh: string; mid: number; ctime: number }[]
   archives: Archive[]; collections: Collection[]; seasons: Season[]; regions: Region[]; dataSources: DataSource[]
@@ -217,7 +218,7 @@ function clipsFrom(catalog: Catalog): Clip[] {
   return clips
 }
 
-export function seed(): DB {
+function demoSeed(): DB {
   const catalog = getCatalog()
   const r = rng(20261029)
   const t0 = now()
@@ -322,7 +323,7 @@ export function seed(): DB {
       ...archives.filter((a) => a.state === 0).slice(0, 4).map((a, i) => ({ id: 1 + i, title: a.title, img: backdrops[i] ?? a.pic, url: `/video/${a.bvid}`, position: 'home' as const, sort: i })),
       ...[...pick([1, 4]), ...pick([5, 7, 2])].filter((x) => x.horizontal).slice(0, 4).map((x, i) => ({ id: 11 + i, title: x.title, img: x.horizontal, url: `/bangumi/play/ss${x.season_id}`, position: 'anime' as const, sort: i, season_id: x.season_id })),
     ],
-    settings: { siteName: 'Jumedia', allowRegister: true, auditRequired: true, maxUploadMB: 2048, announcement: '欢迎体验 Jumedia 在线媒体平台。演示视频来自 Jumedia 媒体库。', allowGuestPlay: true, defaultQuality: 80, userDataSources: true, dataSourcePrivateNetwork: false, dataSourceSyncHours: 6, dataSourceSyncRate: 5, dataSourceSyncConcurrency: 2, officialMid: 1, liveCacheDir: '', liveTranscodeHeight: 1080, imageCacheEnabled: true, imageCacheDir: '', imageCacheMaxMB: 1024 },
+    settings: defaultSettings(1),
     logs: [{ id: 1, mid: 1, action: '系统初始化', target: '演示数据', ctime: t0 }],
     qrcodes: [], reservations: [], fanMedals: [],
   }
@@ -337,9 +338,65 @@ export function seed(): DB {
   return fresh
 }
 
+const defaultSettings = (officialMid: number): DB['settings'] => ({ siteName: 'Jumedia', allowRegister: true, auditRequired: true, maxUploadMB: 2048, announcement: '欢迎来到 Jumedia 在线媒体平台。', allowGuestPlay: true, defaultQuality: 80, userDataSources: true, dataSourcePrivateNetwork: false, dataSourceSyncHours: 6, dataSourceSyncRate: 5, dataSourceSyncConcurrency: 2, officialMid, liveCacheDir: '', liveTranscodeHeight: 1080, imageCacheEnabled: true, imageCacheDir: '', imageCacheMaxMB: 1024 })
+
+export function seed(): DB {
+  setDemoPackage()
+  const fresh: DB = {
+    version: VERSION, seq: 1000,
+    users: [{ mid: 1, username: 'jumedia', password: 'admin123', uname: '聚媒管理员', face: '/mock/avatars/u1.png', sign: '', sex: '保密', birthday: '', email: '', level: 0, exp: 0, coins: 0, role: 'admin', status: 0, ctime: now(), top_photo: '', vip: 0 }],
+    sessions: [], archives: [], collections: [], seasons: [], regions: structuredClone(REGIONS), dataSources: [],
+    liveAreas: structuredClone(LIVE_AREAS), rooms: [], liveMessages: [], replies: [], danmaku: [], seededDanmaku: [],
+    relations: [], likes: [], dislikes: [], coins: [], favFolders: [], history: [], historyPaused: [], toview: [],
+    bangumiFollow: [], dmConfig: {}, dmFilter: {}, reservations: [], fanMedals: [], banners: [], liveCaches: [],
+    settings: { ...defaultSettings(1), sensitiveWords: DEFAULT_SENSITIVE_WORDS }, logs: [], qrcodes: [],
+  }
+  for (const [parent, names] of Object.entries(SUB_REGIONS)) names.forEach((name, i) => fresh.regions.push({ tid: Number(parent) * 100 + i + 1, name, sort: i, visible: true, parent: Number(parent) }))
+  extend15(fresh); extend16(fresh); extend17(fresh)
+  return fresh
+}
+
+export function importDemo(pack: DemoPackage) {
+  const current = getDB()
+  const ignored = new Set(['users', 'regions', 'liveAreas', 'sessions', 'qrcodes', 'logs'])
+  if (current.demoPackage || current.users.some((u) => u.role !== 'admin') || Object.entries(current).some(([k, v]) => !ignored.has(k) && (Array.isArray(v) ? v.length > 0 : ['dmConfig', 'dmFilter'].includes(k) && Object.keys(v).length > 0))) throw new Error('请先重置为初始状态再导入演示数据')
+  setDemoPackage(pack)
+  try {
+    const fresh = demoSeed()
+    const offset = Math.max(current.seq, ...current.users.map((u) => u.mid))
+    const ids = new Set(['mid', 'uid', 'fid', 'ruid', 'aid', 'cid', 'ep_id', 'season_id', 'media_id', 'room_id', 'id', 'rpid', 'oid', 'root', 'parent', 'sid', 'medal_id'])
+    const shift = (v: unknown, key = ''): unknown => {
+      if (typeof v === 'number' && v && ids.has(key)) return v + offset
+      if (Array.isArray(v)) return v.map((x) => shift(x, ['aids', 'likers', 'haters'].includes(key) ? 'id' : key))
+      if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shift(x, k)]))
+      return v
+    }
+    for (const key of Object.keys(fresh) as (keyof DB)[]) {
+      if (['settings', 'regions', 'liveAreas', 'version', 'seq'].includes(key)) continue
+      ;(fresh as unknown as Record<string, unknown>)[key] = shift(fresh[key])
+    }
+    for (const a of fresh.archives) a.bvid = av2bv(a.aid)
+    for (const b of fresh.banners) {
+      if (b.url.startsWith('/video/')) { const a = fresh.archives.find((a) => a.aid === bv2av(b.url.slice(7)) + offset); if (a) b.url = '/video/' + a.bvid }
+      b.url = b.url.replace(/ss(\d+)/, (_, n) => 'ss' + (Number(n) + offset))
+    }
+    const usernames = new Set(current.users.map((u) => u.username))
+    for (const u of fresh.users) { u.role = 'user'; u.password = 'demo123'; u.username = `demo_${u.mid}_${u.username}`; while (usernames.has(u.username)) u.username += '_'; usernames.add(u.username); u.email = `${u.username}@jumedia.local` }
+    fresh.users.unshift(...current.users)
+    fresh.sessions = current.sessions
+    fresh.settings = current.settings
+    fresh.regions = current.regions
+    fresh.liveAreas = current.liveAreas
+    fresh.demoPackage = pack
+    fresh.seq = offset + 30000000
+    localStorage.setItem(KEY, JSON.stringify(fresh))
+    db = fresh
+  } catch (e) { setDemoPackage(current.demoPackage); throw e }
+}
+
 let db: DB | null = null
 
-/** Needs `loadEmby()` to have run, so the seed can use the media catalog. */
+/** Load the persisted database before authenticating imported demo media. */
 export function getDB(): DB {
   if (db) return db
   try {
@@ -357,7 +414,18 @@ export function getDB(): DB {
       if (parsed.version === 15) upgrade15(parsed)
       if (parsed.version === 16) upgrade16(parsed)
       if (parsed.version === 17) upgrade17(parsed)
-      if (parsed.version === VERSION) return (db = parsed)
+      if (parsed.version === VERSION) {
+        const base = seed()
+        for (const region of base.regions) if (!parsed.regions.some((r) => r.tid === region.tid)) parsed.regions.push(region)
+        for (const area of base.liveAreas) {
+          const existing = parsed.liveAreas.find((a) => a.id === area.id)
+          if (!existing) parsed.liveAreas.push(area)
+          else for (const child of area.children) if (!existing.children.some((c) => c.id === child.id)) existing.children.push(child)
+        }
+        base.settings.officialMid = parsed.users.find((u) => u.role === 'admin')?.mid ?? 0
+        for (const [key, value] of Object.entries(base.settings)) if (parsed.settings[key] === undefined) parsed.settings[key] = value
+        setDemoPackage(parsed.demoPackage); db = parsed; save(); return parsed
+      }
     }
   } catch { /* fall through to a fresh seed */ }
   db = seed()
@@ -561,7 +629,11 @@ export function save() {
 }
 
 export function resetDB() {
+  const admins = getDB().users.filter((u) => u.role === 'admin')
   db = seed()
+  db.users = admins
+  db.settings.officialMid = admins[0]?.mid ?? 0
+  db.seq = Math.max(1000, ...admins.map((u) => u.mid))
   try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* ignore */ }
 }
 
@@ -573,12 +645,12 @@ export function nextID(): number {
 
 export function seedDanmaku(cid: number, duration: number) {
   const d = getDB()
-  if (d.seededDanmaku.includes(cid)) return
+  if (!d.demoPackage || ![...d.archives.flatMap((a) => a.pages), ...d.seasons.flatMap((s) => s.episodes)].some((p) => p.cid === cid && p.media.startsWith('emby:')) || d.seededDanmaku.includes(cid)) return
   const r = rng(hash(String(cid)))
   const span = Math.max(10, Math.min(duration, 360))
   for (let i = 0; i < 46; i++) {
     const mode = r() < 0.86 ? 1 : r() < 0.5 ? 5 : 4
-    d.danmaku.push({ id: nextID(), cid, progress: Math.floor(r() * span * 1000), mode, fontsize: 25, color: COLORS[Math.floor(r() * COLORS.length)], mid: Math.floor(r() * 12) + 1, content: DANMAKU[Math.floor(r() * DANMAKU.length)], ctime: now() - 86400, weight: 1 + Math.floor(r() * 10) })
+    d.danmaku.push({ id: nextID(), cid, progress: Math.floor(r() * span * 1000), mode, fontsize: 25, color: COLORS[Math.floor(r() * COLORS.length)], mid: d.users.filter((u) => u.role === 'user')[Math.floor(r() * d.users.filter((u) => u.role === 'user').length)]?.mid ?? 0, content: DANMAKU[Math.floor(r() * DANMAKU.length)], ctime: now() - 86400, weight: 1 + Math.floor(r() * 10) })
   }
   d.seededDanmaku.push(cid)
 }
