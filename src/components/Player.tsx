@@ -39,6 +39,8 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
   const [url, setUrl] = useState<string>()
   const [format, setFormat] = useState<string>()
   const [error, setError] = useState<string>()
+  /** Fetching the play url or buffering, until the media can play (first frame / `canplay`). */
+  const [loading, setLoading] = useState(true)
   const [qualities, setQualities] = useState<Quality[]>([])
   const [qn, setQn] = useState(80)
   const [playing, setPlaying] = useState(false)
@@ -98,7 +100,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
 
   useEffect(() => {
     let alive = true
-    setError(undefined); setUrl(undefined); setFormat(undefined); setTime(0); setDuration(0)
+    setError(undefined); setUrl(undefined); setFormat(undefined); setTime(0); setDuration(0); setLoading(true)
     danmaku.current = []; setDmCount(0); loadedSegments.current.clear(); clearDanmaku()
     resolve(qn).then((u) => alive && setUrl(u)).catch((e) => alive && setError(e.message))
     if (source.kind !== 'live') {
@@ -122,6 +124,9 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
       pause: () => { setPlaying(false); setIdle(false); reportRef.current() },
       timeupdate: () => { setTime(m.currentTime); setBuffered(bufferedEnd(m)) },
       durationchange: () => setDuration(Number.isFinite(m.duration) ? m.duration : 0),
+      waiting: () => setLoading(true),
+      canplay: () => setLoading(false),
+      playing: () => setLoading(false),
       ended: () => { reportRef.current(true); if (live) { if (url?.includes('.m3u8')) setError('直播已结束'); return } onEndedRef.current?.() },
       error: () => { if (url && !url.startsWith('blob:')) setError(engine.current ? '视频解码失败，当前浏览器可能不支持该视频格式' : '视频加载失败') },
     }
@@ -142,6 +147,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
       const unlisten = listen(e)
       e.load().then(async () => {
         await e.play().catch(() => {})
+        setLoading(false)
         if (resume !== undefined) e.currentTime = resume
         else if (start && start > 0 && start < e.duration - 3) { e.currentTime = start; setNotice(`上次看到 ${formatDuration(start)}，已为你续播`); setTimeout(() => setNotice(''), 3500) }
       }).catch(() => setError('视频加载失败，当前浏览器可能不支持该视频格式'))
@@ -384,8 +390,8 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
         <div ref={engineBox} className="engine" hidden={!needsLibmedia(format)} onClick={() => { toggle(); setPop('') }} onDoubleClick={fullscreen} />
         <div ref={layer} className="dm-layer" style={{ bottom: 0 }} />
         {cue && <div className="subtitle">{cue.content}</div>}
-        {!playing && url && !error && <div className="center"><div className="big-play"><Icon name="play" size={30} fill /></div></div>}
-        {!url && !error && <div className="center"><div className="spinner" style={{ borderColor: 'rgba(255,255,255,.2)', borderTopColor: '#fff' }} /></div>}
+        {!playing && url && !loading && !error && <div className="center"><div className="big-play"><Icon name="play" size={30} fill /></div></div>}
+        {(!url || loading) && !error && <div className="center"><div className="spinner" style={{ borderColor: 'rgba(255,255,255,.2)', borderTopColor: '#fff' }} /></div>}
         {error && <div className="error"><div><Icon name="alert-circle" size={36} /><p style={{ marginTop: 10 }}>{error}</p></div></div>}
         {notice && <div className="notice">{notice}</div>}
         <div className="controls" onClick={(e) => e.stopPropagation()}>
@@ -409,7 +415,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
             {qualities.length > 0 && (
               <div style={{ position: 'relative' }}>
                 <button className="cbtn" onClick={() => setPop(pop === 'quality' ? '' : 'quality')}>{qualities.find((q) => q.qn === qn)?.label.split(' ')[0] ?? '画质'}</button>
-                {pop === 'quality' && <div className="cpop">{qualities.map((q) => <button key={q.qn} className={q.qn === qn ? 'on' : ''} onClick={async () => { setPop(''); pendingSeek.current = media()?.currentTime ?? 0; try { const u = await resolve(q.qn); setUrl(undefined); setTimeout(() => setUrl(u)); flash(`已切换至 ${q.label}`) } catch (e) { toastError(e) } }}>{q.label}</button>)}</div>}
+                {pop === 'quality' && <div className="cpop">{qualities.map((q) => <button key={q.qn} className={q.qn === qn ? 'on' : ''} onClick={async () => { setPop(''); pendingSeek.current = media()?.currentTime ?? 0; try { const u = await resolve(q.qn); setUrl(undefined); setLoading(true); setTimeout(() => setUrl(u)); flash(`已切换至 ${q.label}`) } catch (e) { toastError(e) } }}>{q.label}</button>)}</div>}
               </div>
             )}
             {!live && (
