@@ -662,14 +662,32 @@ const routes: Record<string, Handler> = {
     return { page: { num: pn, size: 20, count: children.length }, root: replyJSON(root, c.me?.mid, false), replies: page(children, pn, 20).map((r) => replyJSON(r, c.me?.mid, false)) }
   },
   '/x/v2/reply/add': (c) => {
+    if (c.me && c.me.status !== 0) fail(-102, '账号已被封停')
     const u = csrf(c), oid = int(c.p.oid)
+    if (c.method !== 'POST') fail(-400, '请使用 POST')
+    if (c.p.type !== '1') fail(12009, '评论主体的type不合法')
     const message = (c.p.message ?? '').trim()
     if (!message || message.length > 1000) fail(12025, '评论字数需在 1–1000 字之间')
-    if (String(c.db.settings.sensitiveWords ?? '').split('\n').some((w) => w.trim() && message.toLowerCase().includes(w.trim().toLowerCase()))) fail(-400, '评论包含不适宜内容，请修改后重试')
-    const r = { rpid: nextID(), oid, mid: u.mid, root: int(c.p.root), parent: int(c.p.parent), message, ctime: ts(), likers: [], haters: [] }
+    if (String(c.db.settings.sensitiveWords ?? '').split('\n').some((w) => w.trim() && message.toLowerCase().includes(w.trim().toLowerCase()))) fail(12016, '评论内容包含敏感信息，请修改后重试')
+    const a = c.db.archives.find((x) => x.aid === oid && x.state === 0)
+    if (!a) fail(-404, '啥都木有')
+    if (c.db.settings.commentEnabled === false) fail(12002, '评论区已关闭')
+    const root = int(c.p.root), parent = int(c.p.parent)
+    if ((root || parent) && c.db.settings.commentReplyEnabled === false) fail(12003, '禁止回复')
+    if (c.db.userBlocks?.some((b) => b.mid === a!.mid && b.fid === u.mid)) fail(12035, '该账号被UP主列入评论黑名单')
+    for (const key of ['root', 'parent']) if (c.p[key] && c.p[key] !== '0' && (!Number.isSafeInteger(Number(c.p[key])) || Number(c.p[key]) <= 0)) fail(12006, '没有该评论')
+    if (root || parent) {
+      const r = c.db.replies.find((r) => r.rpid === root && r.oid === oid && r.root === 0)
+      const p = c.db.replies.find((r) => r.rpid === parent && r.oid === oid && (r.rpid === root || r.root === root))
+      if (!r || !p) fail(12006, '没有该评论')
+    }
+    const now = ts(), duplicate = Number(c.db.settings.commentDuplicateWindow ?? 0), interval = Number(c.db.settings.commentMinInterval ?? 0)
+    if (duplicate > 0 && c.db.replies.some((r) => r.mid === u.mid && r.oid === oid && r.root === root && r.parent === parent && r.message === message && r.ctime > now - duplicate)) fail(12051, '重复评论，请勿刷屏')
+    if (interval > 0 && c.db.replies.some((r) => r.mid === u.mid && r.ctime > now - interval)) fail(-509, '请求过于频繁，请稍后再试')
+    const r = { rpid: nextID(), oid, mid: u.mid, root, parent, message, ctime: now, likers: [], haters: [] }
     c.db.replies.push(r)
     syncReplyCount(c.db, oid)
-    return { rpid: r.rpid, rpid_str: String(r.rpid), success_toast: '发送成功', reply: replyJSON(r, u.mid) }
+    return { success_action: 0, success_toast: '发送成功', need_captcha: false, url: '', rpid: r.rpid, rpid_str: String(r.rpid), dialog: parent, dialog_str: String(parent), root, root_str: String(root), parent, parent_str: String(parent), emote: {}, reply: replyJSON(r, u.mid) }
   },
   '/x/v2/reply/del': (c) => {
     const u = csrf(c)
@@ -1637,6 +1655,11 @@ const routes: Record<string, Handler> = {
   '/x/admin/settings/save': (c) => {
     admin(c)
     if (c.p.reset === 'true') { resetDB(); return null }
+    for (const key of ['commentMinInterval', 'commentDuplicateWindow']) {
+      const v = c.p[key]
+      if (v !== undefined && (!v.trim() || !Number.isInteger(Number(v)) || Number(v) < 0 || Number(v) > 86400)) fail(-400, '评论防刷时间应为 0–86400 秒的整数')
+    }
+    for (const key of ['commentEnabled', 'commentReplyEnabled']) if (c.p[key] !== undefined && !['true', 'false'].includes(c.p[key])) fail(-400, '评论开关参数无效')
     // The server also checks it can create and write the directory.
     if (c.p.liveCacheDir !== undefined && c.p.liveCacheDir.trim() && !c.p.liveCacheDir.trim().startsWith('/')) fail(-400, '缓存目录必须是绝对路径')
     if (c.p.liveTranscodeHeight !== undefined && !TRANSCODE_HEIGHTS.includes(Number(c.p.liveTranscodeHeight))) fail(-400, '转码分辨率无效')

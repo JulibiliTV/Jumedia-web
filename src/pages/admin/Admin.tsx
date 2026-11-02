@@ -700,7 +700,18 @@ export function SiteSettings() {
             <div className="field"><label>单文件上传上限（MB）</label><input className="input" type="number" value={f.maxUploadMB} onChange={(e) => setF({ ...f, maxUploadMB: +e.target.value })} /></div>
             <div className="field"><label>默认清晰度</label><select className="select" value={f.defaultQuality} onChange={(e) => setF({ ...f, defaultQuality: +e.target.value })}><option value={80}>1080P 高清</option><option value={64}>720P 准高清</option><option value={32}>480P 标清</option></select></div>
           </div>
-          <div className="field"><label>疑似违规关键词</label><textarea className="textarea mono" rows={3} value={f.sensitiveWords ?? ''} onChange={(e) => setF({ ...f, sensitiveWords: e.target.value })} /><span className="hint">每行一个。评论或弹幕含这些词、外部链接或长串数字时，在「评论与弹幕」中标为疑似违规</span></div>
+          <div className="field"><label>敏感词</label><textarea className="textarea mono" rows={3} value={f.sensitiveWords ?? ''} onChange={(e) => setF({ ...f, sensitiveWords: e.target.value })} /><span className="hint">每行一个。命中的评论会被拒绝；弹幕命中、外部链接或长串数字会在「评论与弹幕」中标为疑似违规</span></div>
+        </div>
+      </div>
+      <div className="panel set-sec">
+        <div className="panel-title"><h3>评论</h3></div>
+        <div className="stack">
+          <label className="row between"><b>允许发表评论</b><Switch on={f.commentEnabled ?? true} onChange={(v) => setF({ ...f, commentEnabled: v })} /></label>
+          <label className="row between"><b>允许楼中楼回复</b><Switch on={f.commentReplyEnabled ?? true} onChange={(v) => setF({ ...f, commentReplyEnabled: v })} /></label>
+          <div className="form-grid">
+            <div className="field"><label>两次评论最小间隔（秒）</label><input className="input" type="number" min={0} max={86400} step={1} value={f.commentMinInterval ?? 0} onChange={(e) => setF({ ...f, commentMinInterval: e.target.value })} /><span className="hint">按账号限制，0 表示不限制</span></div>
+            <div className="field"><label>重复评论拦截时间（秒）</label><input className="input" type="number" min={0} max={86400} step={1} value={f.commentDuplicateWindow ?? 0} onChange={(e) => setF({ ...f, commentDuplicateWindow: e.target.value })} /><span className="hint">同一账号在同一位置重复发表相同内容时拦截，0 表示不限制</span></div>
+          </div>
         </div>
       </div>
       <div className="panel set-sec">

@@ -50,6 +50,52 @@ assert.equal((await call('/x/admin/reply/report/dismiss', { rpid: '100' }, 1, 'P
 assert.equal((await call('/x/admin/replies', { reported: '1' }, 1)).data.list.length, 0)
 assert.equal((await call('/x/v2/reply', { oid: '1' })).data.replies.length, 1)
 assert.equal((await call('/x/relation/modify', { fid: '4', act: '5' }, 1, 'POST')).code, 0)
+// Posting uses the same envelope and policy errors as the real server.
+db.archives = [{ aid: 1, mid: 1, state: 0, stat: { reply: 3 } } as (typeof db.archives)[number]]
+const send = (message: string, root = '0', parent = root) => call('/x/v2/reply/add', { type: '1', oid: '1', message, root, parent }, 2, 'POST')
+let posted = await send('contract root')
+assert.equal(posted.code, 0)
+const postedRoot = posted.data.rpid_str
+for (const [key, value] of Object.entries({ success_action: 0, need_captcha: false, url: '', root: 0, root_str: '0', parent: 0, parent_str: '0', dialog: 0, dialog_str: '0' })) assert.equal(posted.data[key], value, key)
+assert.deepEqual(posted.data.emote, {})
+for (const key of ['root','root_str','parent','parent_str','dialog','dialog_str']) assert.equal(posted.data.reply[key], posted.data[key])
+posted = await send('contract child', postedRoot)
+assert.equal(posted.data.dialog_str, postedRoot)
+const postedChild = posted.data.rpid_str
+assert.equal((await send('contract nested', postedRoot, postedChild)).data.parent_str, postedChild)
+assert.equal((await send('bad root', postedChild)).code, 12006)
+assert.equal((await send('bad parent', postedRoot, '999999')).code, 12006)
+assert.equal((await send('missing root', '0', postedRoot)).code, 12006)
+assert.equal((await call('/x/v2/reply/add', { type: '2', oid: '1', message: 'bad type' }, 2, 'POST')).code, 12009)
+assert.equal((await call('/x/v2/reply/add', { oid: '1', message: 'missing type' }, 2, 'POST')).code, 12009)
+db.settings.commentEnabled = false
+assert.equal((await send('closed')).code, 12002)
+db.settings.commentEnabled = true
+db.settings.commentReplyEnabled = false
+assert.equal((await send('closed replies', postedRoot)).code, 12003)
+db.settings.commentReplyEnabled = true
+db.settings.sensitiveWords = 'forbidden'
+assert.equal((await send('FORBIDDEN text')).code, 12016)
+assert.equal((await call('/x/relation/modify', { fid: '2', act: '5' }, 1, 'POST')).code, 0)
+assert.equal((await send('owner blocked me')).code, 12035)
+assert.equal((await call('/x/relation/modify', { fid: '2', act: '6' }, 1, 'POST')).code, 0)
+db.settings.commentMinInterval = 60
+assert.equal((await send('too fast')).code, -509)
+db.settings.commentMinInterval = 0
+db.settings.commentDuplicateWindow = 60
+const before = db.replies.length
+assert.equal((await send('contract root')).code, 12051)
+assert.equal(db.replies.length, before)
+const concurrent = await Promise.all([send('concurrent'), send('concurrent')])
+assert.deepEqual(concurrent.map((x) => x.code).sort(), [0, 12051])
+for (const key of ['commentMinInterval', 'commentDuplicateWindow']) {
+  for (const value of ['-1', '1.5', '86401', 'NaN', '']) assert.equal((await call('/x/admin/settings/save', { [key]: value }, 1, 'POST')).code, -400)
+}
+db.users[1].status = 1
+assert.equal((await send('banned')).code, -102)
+db.users[1].status = 0
+db.archives[0].state = -100
+assert.equal((await send('deleted')).code, -404)
 resetDB()
 assert.equal(getDB().userBlocks?.length ?? 0, 0)
 assert.equal(getDB().commentReports?.length ?? 0, 0)

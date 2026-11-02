@@ -5,7 +5,7 @@ import { type Comment, compact, countText, dateTimeText, timeText, videoComment 
 import { useInfinite } from '../lib/hooks'
 import { useSession } from '../lib/session'
 import { Icon } from './Icon'
-import { Avatar, confirmDialog, Level, LoadMore, Segmented, Spinner, toastError } from './ui'
+import { Avatar, confirmDialog, Level, LoadMore, Segmented, Spinner, toast, toastError } from './ui'
 
 function Composer({ oid, root, parent, placeholder, onSent, autoFocus }: { oid: number; root?: number; parent?: number; placeholder?: string; onSent: (c: Comment) => void; autoFocus?: boolean }) {
   const { me } = useSession()
@@ -19,6 +19,7 @@ function Composer({ oid, root, parent, placeholder, onSent, autoFocus }: { oid: 
       const r = await juli.replyAdd(oid, text.trim(), root, parent)
       const c = videoComment(r.data?.reply)
       if (c) onSent(c)
+      toast(r.data?.success_toast || (c ? '发送成功' : '评论已提交，请稍后查看'), 'success')
       setText('')
     } catch (e) { toastError(e) } finally { setBusy(false) }
   }

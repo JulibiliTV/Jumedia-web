@@ -119,7 +119,7 @@ export function replyJSON(r: Reply, me: number | undefined, withChildren = true)
   const parent = r.parent && r.parent !== r.root ? db.replies.find((x) => x.rpid === r.parent) : undefined
   const prefix = parent ? `回复 @${userById(parent.mid)?.uname ?? '用户'} :` : ''
   return {
-    rpid: r.rpid, rpid_str: String(r.rpid), oid: r.oid, type: 1, mid: r.mid, root: r.root, parent: r.parent, count: children.length, rcount: children.length,
+    rpid: r.rpid, rpid_str: String(r.rpid), oid: r.oid, type: 1, mid: r.mid, root: r.root, root_str: String(r.root), parent: r.parent, parent_str: String(r.parent), dialog: r.parent, dialog_str: String(r.parent), state: 0, attr: 0, count: children.length, rcount: children.length,
     ctime: r.ctime, like: r.likers.length, action: me ? (r.likers.includes(me) ? 1 : r.haters.includes(me) ? 2 : 0) : 0,
     member: memberJSON(r.mid), content: { message: prefix + r.message, members: [], pictures: [] },
     replies: children.slice(0, 3).map((c) => replyJSON(c, me, false)),
