@@ -5,7 +5,7 @@ import { dataSourceJSON, dsHlsPath, dsPlaylist, embyBase, forgetSession, mediaFo
 import { parseDemoPackage } from './emby'
 import { cacheDir, cacheJSON, cacheKeyOf, cachePath, ensureCache, findCache, notReady, retryCache, roomCache, tickCaches, TRANSCODE_HEIGHTS } from './liveCache'
 import { liveWindow, parsePlaylist, passthrough, type Playlist, relayMaster } from './hlsRelay'
-import { archiveById, arcView, compactCount, feedCard, followerCount, followingCount, indexShow, levelInfo, owner, published, regionName, replyJSON, roomCard, seasonBadge, seasonCard, spaceArc, userById, userFace } from './render'
+import { archiveById, arcView, compactCount, feedCard, followerCount, followingCount, indexShow, levelInfo, owner, published, regionName, replyJSON, commentVisible, roomCard, seasonBadge, seasonCard, spaceArc, userById, userFace } from './render'
 
 /**
  * In-browser implementation of the Jumedia API, installed over `fetch` while
@@ -218,6 +218,8 @@ function indexFilter(c: Ctx, s: DB['seasons'][number]) {
   return true
 }
 const replyOrder = (mode: number) => (a: DB['replies'][number], b: DB['replies'][number]) => (mode === 2 ? b.ctime - a.ctime : b.likers.length - a.likers.length || b.ctime - a.ctime)
+const reportReasons: Record<string, string> = { 9: '违法违规', 2: '色情', 10: '低俗', 12: '赌博诈骗', 23: '违法信息外链', 19: '涉政谣言', 22: '虚假不实信息', 20: '涉社会事件谣言', 7: '人身攻击', 15: '侵犯隐私', 1: '垃圾广告', 4: '引战', 5: '剧透', 3: '刷屏', 8: '视频不相关', 18: '违规抽奖', 17: '青少年不良信息', 0: '其他' }
+const pendingReports = (db: DB, rpid: number) => (db.commentReports ?? []).filter((r) => r.rpid === rpid && r.status === 'pending').map((r) => ({ ...r, reason: (reportReasons[r.reason] ?? r.reason) + (r.content ? `：${r.content}` : '') }))
 /** Deterministic "watching now" for a video: scales with plays, shifts every minute. */
 const watching = (aid: number, view: number) => Math.max(1, Math.round(view / 4000 + ((aid * 7 + Math.floor(Date.now() / 60000)) % 23)))
 const regionArcs = (db: DB, rid: number) => {
@@ -605,24 +607,57 @@ const routes: Record<string, Handler> = {
   '/x/web-interface/share/add': (c) => { const a = archiveOf(c); a.stat.share++; return { share_url: `${c.origin}/video/${a.bvid}`, count: a.stat.share } },
   '/x/relation/modify': (c) => {
     const u = csrf(c), fid = int(c.p.fid)
-    if (fid === u.mid) fail(22001, '不能关注自己')
+    if (fid === u.mid) fail(22001, c.p.act === '5' || c.p.act === '6' ? '不能拉黑自己' : '不能关注自己')
     if (!userById(fid)) fail(22003, '用户不存在')
+    if (c.p.act === '5' || c.p.act === '6') {
+      if (c.method !== 'POST') fail(-400, '请使用 POST')
+      c.db.userBlocks = (c.db.userBlocks ?? []).filter((b) => b.mid !== u.mid || b.fid !== fid)
+      if (c.p.act === '5') {
+        c.db.userBlocks.push({ mid: u.mid, fid, ctime: ts() })
+        c.db.relations = c.db.relations.filter((r) => r.mid !== u.mid || r.fid !== fid)
+      }
+      return null
+    }
+    if (c.p.act === '1' && (c.db.userBlocks ?? []).some((b) => b.mid === u.mid && b.fid === fid)) fail(-403, '请先解除拉黑')
     c.db.relations = c.db.relations.filter((r) => !(r.mid === u.mid && r.fid === fid))
     if (c.p.act === '1') c.db.relations.push({ mid: u.mid, fid, mtime: ts() })
     return null
   },
 
   // ---------------- 评论 ----------------
+  '/x/v2/reply/report': (c) => {
+    const u = csrf(c)
+    if (c.method !== 'POST') fail(-400, '请使用 POST')
+    if (c.p.type !== '1') fail(-400, '评论区类型无效')
+    const r = c.db.replies.find((r) => r.rpid === int(c.p.rpid) && r.oid === int(c.p.oid))
+    if (!r) fail(12022, '评论已被删除')
+    if (!reportReasons[c.p.reason]) fail(-400, '请选择举报原因')
+    const content = (c.p.content ?? '').trim()
+    if (content.length > 1000 || (['0', '22'].includes(c.p.reason) && !content)) fail(-400, '请填写举报说明（1–1000 字）')
+    if (r!.mid === u.mid) fail(-400, '不能举报自己的评论')
+    const reports = c.db.commentReports ??= []
+    if (!reports.some((x) => x.mid === u.mid && x.rpid === r!.rpid)) reports.push({ mid: u.mid, rpid: r!.rpid, reason: c.p.reason, content, status: 'pending', ctime: ts() })
+    if (truthy(c.p.add_blacklist) && !(c.db.userBlocks ?? []).some((b) => b.mid === u.mid && b.fid === r!.mid)) {
+      (c.db.userBlocks ??= []).push({ mid: u.mid, fid: r!.mid, ctime: ts() })
+      c.db.relations = c.db.relations.filter((x) => x.mid !== u.mid || x.fid !== r!.mid)
+    }
+    return null
+  },
+  '/x/relation/blacks': (c) => {
+    const u = login(c)
+    const list = (c.db.userBlocks ?? []).filter((b) => b.mid === u.mid).sort((a, b) => b.ctime - a.ctime || a.fid - b.fid).map((b) => ({ mid: b.fid, uname: userById(b.fid)?.uname ?? '', face: userFace(b.fid, userById(b.fid)?.face), sign: userById(b.fid)?.sign ?? '', mtime: b.ctime, attribute: 128, tag: null, special: 0 }))
+    return { list: page(list, int(c.p.pn, 1), Math.min(50, int(c.p.ps, 50))), total: list.length, re_version: 0 }
+  },
   '/x/v2/reply': (c) => {
     const oid = int(c.p.oid), pn = int(c.p.pn, 1), ps = int(c.p.ps, 20)
-    const top = c.db.replies.filter((r) => r.oid === oid && r.root === 0)
+    const top = c.db.replies.filter((r) => r.oid === oid && r.root === 0 && commentVisible(c.db, c.me?.mid, r))
       .sort((a, b) => (c.p.sort === '0' ? b.ctime - a.ctime : b.likers.length - a.likers.length || b.ctime - a.ctime))
-    return { page: { num: pn, size: ps, count: top.length, acount: c.db.replies.filter((r) => r.oid === oid).length }, replies: page(top, pn, ps).map((r) => replyJSON(r, c.me?.mid)), upper: { mid: archiveById(oid)?.mid ?? 0 } }
+    return { page: { num: pn, size: ps, count: top.length, acount: c.db.replies.filter((r) => r.oid === oid && commentVisible(c.db, c.me?.mid, r)).length }, replies: page(top, pn, ps).map((r) => replyJSON(r, c.me?.mid)), upper: { mid: archiveById(oid)?.mid ?? 0 } }
   },
   '/x/v2/reply/reply': (c) => {
     const root = c.db.replies.find((r) => r.rpid === int(c.p.root))
-    if (!root) return fail(12022, '评论已被删除')
-    const children = c.db.replies.filter((r) => r.root === root.rpid).sort((a, b) => a.ctime - b.ctime)
+    if (!root || !commentVisible(c.db, c.me?.mid, root)) return fail(12022, '评论已被删除')
+    const children = c.db.replies.filter((r) => r.root === root.rpid && commentVisible(c.db, c.me?.mid, r)).sort((a, b) => a.ctime - b.ctime)
     const pn = int(c.p.pn, 1)
     return { page: { num: pn, size: 20, count: children.length }, root: replyJSON(root, c.me?.mid, false), replies: page(children, pn, 20).map((r) => replyJSON(r, c.me?.mid, false)) }
   },
@@ -630,6 +665,7 @@ const routes: Record<string, Handler> = {
     const u = csrf(c), oid = int(c.p.oid)
     const message = (c.p.message ?? '').trim()
     if (!message || message.length > 1000) fail(12025, '评论字数需在 1–1000 字之间')
+    if (String(c.db.settings.sensitiveWords ?? '').split('\n').some((w) => w.trim() && message.toLowerCase().includes(w.trim().toLowerCase()))) fail(-400, '评论包含不适宜内容，请修改后重试')
     const r = { rpid: nextID(), oid, mid: u.mid, root: int(c.p.root), parent: int(c.p.parent), message, ctime: ts(), likers: [], haters: [] }
     c.db.replies.push(r)
     syncReplyCount(c.db, oid)
@@ -641,6 +677,7 @@ const routes: Record<string, Handler> = {
     if (!r) return fail(12022, '评论已被删除')
     if (r.mid !== u.mid && archiveById(r.oid)?.mid !== u.mid && u.role !== 'admin') fail(-403, '没有权限')
     c.db.replies = c.db.replies.filter((x) => x.rpid !== r.rpid && x.root !== r.rpid)
+    for (const report of c.db.commentReports ?? []) if (report.status === 'pending' && !c.db.replies.some((x) => x.rpid === report.rpid)) report.status = 'removed'
     syncReplyCount(c.db, r.oid)
     return null
   },
@@ -768,9 +805,11 @@ const routes: Record<string, Handler> = {
     const mid = int(c.p.mid)
     const me = c.me?.mid
     const a = me && c.db.relations.some((r) => r.mid === me && r.fid === mid), b = me && c.db.relations.some((r) => r.mid === mid && r.fid === me)
-    return { relation: { mid, attribute: a ? (b ? 6 : 2) : 0, mtime: 0 }, be_relation: { mid: me ?? 0, attribute: b ? (a ? 6 : 2) : 0 } }
+    const blocked = (c.db.userBlocks ?? []).some((x) => x.mid === me && x.fid === mid)
+    const blockedBy = (c.db.userBlocks ?? []).some((x) => x.mid === mid && x.fid === me)
+    return { relation: { mid, attribute: blocked ? 128 : a ? (b ? 6 : 2) : 0, mtime: 0 }, be_relation: { mid: me ?? 0, attribute: blockedBy ? 128 : b ? (a ? 6 : 2) : 0 } }
   },
-  '/x/relation/stat': (c) => { const mid = int(c.p.vmid); return { mid, following: followingCount(mid), whisper: 0, black: 0, follower: followerCount(mid) } },
+  '/x/relation/stat': (c) => { const mid = int(c.p.vmid); return { mid, following: followingCount(mid), whisper: 0, black: (c.db.userBlocks ?? []).filter((b) => b.mid === mid).length, follower: followerCount(mid) } },
   '/x/web-interface/card': (c) => {
     const u = userById(int(c.p.mid))
     if (!u) return fail(-404, '啥都木有')
@@ -1232,10 +1271,10 @@ const routes: Record<string, Handler> = {
   '/x/v2/reply/wbi/main': (c) => {
     const oid = int(c.p.oid), mode = int(c.p.mode, 3), ps = Math.min(30, int(c.p.ps, 20))
     const next = int(c.p.next, 1) || 1
-    const top = c.db.replies.filter((r) => r.oid === oid && r.root === 0).sort(replyOrder(mode))
+    const top = c.db.replies.filter((r) => r.oid === oid && r.root === 0 && commentVisible(c.db, c.me?.mid, r)).sort(replyOrder(mode))
     const rows = page(top, next, ps)
     return {
-      cursor: { is_begin: next === 1, prev: next - 1, next: next + 1, is_end: next * ps >= top.length, mode, mode_text: mode === 2 ? '最新评论' : '最热评论', all_count: c.db.replies.filter((r) => r.oid === oid).length, name: mode === 2 ? '最新评论' : '最热评论' },
+      cursor: { is_begin: next === 1, prev: next - 1, next: next + 1, is_end: next * ps >= top.length, mode, mode_text: mode === 2 ? '最新评论' : '最热评论', all_count: c.db.replies.filter((r) => r.oid === oid && commentVisible(c.db, c.me?.mid, r)).length, name: mode === 2 ? '最新评论' : '最热评论' },
       replies: rows.map((r) => replyJSON(r, c.me?.mid)), top_replies: [], upper: { mid: archiveById(oid)?.mid ?? 0 },
     }
   },
@@ -1492,10 +1531,17 @@ const routes: Record<string, Handler> = {
   '/x/admin/replies': (c) => {
     admin(c)
     const kw = c.p.keyword ?? '', flagged = truthy(c.p.flagged)
-    const list = c.db.replies.filter((r) => (!kw || searchMatch(r.message + (userById(r.mid)?.uname ?? ''), kw)) && (!flagged || flagOf(c.db, r.message))).sort((a, b) => b.ctime - a.ctime)
-    return { list: page(list, int(c.p.pn, 1), int(c.p.ps, 20)).map((r) => ({ ...replyJSON(r, undefined, false), flag: flagOf(c.db, r.message), archive: archiveById(r.oid) ? { aid: r.oid, bvid: archiveById(r.oid)!.bvid, title: archiveById(r.oid)!.title } : null })), page: { pn: int(c.p.pn, 1), ps: int(c.p.ps, 20), total: list.length }, stat: moderationStat(c.db) }
+    const list = c.db.replies.filter((r) => (!kw || searchMatch(r.message + (userById(r.mid)?.uname ?? ''), kw)) && (!flagged || flagOf(c.db, r.message)) && (!truthy(c.p.reported) || pendingReports(c.db, r.rpid).length > 0)).sort((a, b) => pendingReports(c.db, b.rpid).length - pendingReports(c.db, a.rpid).length || b.ctime - a.ctime)
+    return { list: page(list, int(c.p.pn, 1), int(c.p.ps, 20)).map((r) => ({ ...replyJSON(r, undefined, false), flag: flagOf(c.db, r.message), report_count: pendingReports(c.db, r.rpid).length, report_reasons: [...new Set(pendingReports(c.db, r.rpid).map((x) => x.reason))], archive: archiveById(r.oid) ? { aid: r.oid, bvid: archiveById(r.oid)!.bvid, title: archiveById(r.oid)!.title } : null })), page: { pn: int(c.p.pn, 1), ps: int(c.p.ps, 20), total: list.length }, stat: moderationStat(c.db) }
   },
-  '/x/admin/reply/delete': (c) => { admin(c); const r = c.db.replies.find((x) => x.rpid === int(c.p.rpid)); c.db.replies = c.db.replies.filter((x) => x.rpid !== r?.rpid && x.root !== r?.rpid); if (r) { syncReplyCount(c.db, r.oid); log(c, '删除评论', r.message.slice(0, 20)) } return null },
+  '/x/admin/reply/report/dismiss': (c) => {
+    csrf(c); admin(c)
+    if (c.method !== 'POST') fail(-400, '请使用 POST')
+    for (const r of c.db.commentReports ?? []) if (r.rpid === int(c.p.rpid) && r.status === 'pending') r.status = 'dismissed'
+    log(c, '驳回评论举报', c.p.rpid)
+    return null
+  },
+  '/x/admin/reply/delete': (c) => { admin(c); const r = c.db.replies.find((x) => x.rpid === int(c.p.rpid)); c.db.replies = c.db.replies.filter((x) => x.rpid !== r?.rpid && x.root !== r?.rpid); for (const report of c.db.commentReports ?? []) if (report.status === 'pending' && !c.db.replies.some((x) => x.rpid === report.rpid)) report.status = 'removed'; if (r) { syncReplyCount(c.db, r.oid); log(c, '删除评论', r.message.slice(0, 20)) } return null },
   '/x/admin/danmaku': (c) => {
     admin(c)
     const kw = c.p.keyword ?? '', flagged = truthy(c.p.flagged)

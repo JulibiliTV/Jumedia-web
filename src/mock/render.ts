@@ -106,9 +106,16 @@ export function roomCard(r: LiveRoom) {
   }
 }
 
+export function commentVisible(db: DB, mid: number | undefined, r: Reply): boolean {
+  if (!mid) return true
+  const hidden = (reply: Reply) => (db.userBlocks ?? []).some((b) => b.mid === mid && b.fid === reply.mid) || (db.commentReports ?? []).some((x) => x.mid === mid && x.rpid === reply.rpid)
+  const root = r.root ? db.replies.find((x) => x.rpid === r.root) : undefined
+  return !hidden(r) && (!root || !hidden(root))
+}
+
 export function replyJSON(r: Reply, me: number | undefined, withChildren = true): Record<string, unknown> {
   const db = getDB()
-  const children = withChildren ? db.replies.filter((x) => x.root === r.rpid).sort((a, b) => a.ctime - b.ctime) : []
+  const children = withChildren ? db.replies.filter((x) => x.root === r.rpid && commentVisible(db, me, x)).sort((a, b) => a.ctime - b.ctime) : []
   const parent = r.parent && r.parent !== r.root ? db.replies.find((x) => x.rpid === r.parent) : undefined
   const prefix = parent ? `回复 @${userById(parent.mid)?.uname ?? '用户'} :` : ''
   return {

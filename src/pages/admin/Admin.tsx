@@ -510,7 +510,11 @@ export function Moderation() {
   const [kw, setKw] = useState('')
   const [q, setQ] = useState('')
   const [flagged, setFlagged] = useState(false)
-  const d = useAsync(() => (tab === 'replies' ? admin.replies({ pn, keyword: q, flagged: flagged ? 1 : undefined }) : admin.danmaku({ pn, keyword: q, flagged: flagged ? 1 : undefined })), [tab, pn, q, flagged])
+  const [reported, setReported] = useState(false)
+  const d = useAsync(() => (tab === 'replies' ? admin.replies({ pn, keyword: q, flagged: flagged ? 1 : undefined, reported: reported ? 1 : undefined }) : admin.danmaku({ pn, keyword: q, flagged: flagged ? 1 : undefined })), [tab, pn, q, flagged, reported])
+  const dismissReport = async (id: number) => {
+    try { const r = await admin.replyReportDismiss(id); if (r.code) throw new Error(r.message); d.reload(); toast('举报已驳回', 'success') } catch (e) { toastError(e) }
+  }
   const ban = async (mid: number, name: string) => {
     if (!(await confirmDialog(`封禁用户“${name}”？封禁后该用户会被退出登录，不能再登录。`, { danger: true, ok: '封禁' }))) return
     try { const r = await admin.userUpdate({ mid, status: 1 }); if (r.code) throw new Error(r.message); toast('已封禁', 'success') } catch (e) { toastError(e) }
@@ -522,12 +526,12 @@ export function Moderation() {
   return (
     <div className="stack" style={{ gap: 16 }}>
       <Tabs value={tab} onChange={(t) => { setTab(t); setPn(1) }} items={[{ value: 'replies', label: '评论' }, { value: 'danmaku', label: '用户弹幕' }]} />
-      <HeadActions><label className="row" style={{ gap: 8, fontSize: 13, color: 'var(--text-2)', cursor: 'pointer' }}><input type="checkbox" checked={flagged} onChange={(e) => { setFlagged(e.target.checked); setPn(1) }} />只看疑似违规</label><SearchPill value={kw} onChange={setKw} onSubmit={() => { setQ(kw); setPn(1) }} placeholder="内容关键词 / 用户" /></HeadActions>
+      <HeadActions><label className="row" style={{ gap: 8, fontSize: 13, color: 'var(--text-2)', cursor: 'pointer' }}><input type="checkbox" checked={flagged} onChange={(e) => { setFlagged(e.target.checked); setPn(1) }} />只看疑似违规</label>{tab === 'replies' && <label className="row" style={{ gap: 8, fontSize: 13, color: 'var(--text-2)', cursor: 'pointer' }}><input type="checkbox" checked={reported} onChange={(e) => { setReported(e.target.checked); setPn(1) }} />待处理举报</label>}<SearchPill value={kw} onChange={setKw} onSubmit={() => { setQ(kw); setPn(1) }} placeholder="内容关键词 / 用户" /></HeadActions>
       {d.loading && !d.data ? <Loading /> : !d.data?.list.length ? <Empty title="没有内容" /> : (
         <section className="list-card"><div className="table-wrap"><table className="table">
           <thead><tr><th>用户</th><th>内容</th><th>{tab === 'replies' ? '所在稿件' : '所在视频'}</th><th>{tab === 'replies' ? '点赞' : '时间点'}</th><th>发布时间</th><th /></tr></thead>
           <tbody>{d.data.list.map((x: any) => tab === 'replies' ? (
-            <tr key={x.rpid} className={x.flag ? 'flagged' : ''}><td className="nowrap"><div className="row"><Avatar src={x.member.avatar} size={26} />{x.member.uname}</div></td><td style={{ maxWidth: 420 }}>{flag(x.flag)}{x.content.message}</td><td>{x.archive ? <Link to={`/video/${x.archive.bvid}`} className="clamp-1" style={{ color: 'var(--brand)' }}>{x.archive.title}</Link> : <span className="faint">番剧剧集</span>}</td><td>{x.like}</td><td className="nowrap faint">{dateTimeText(x.ctime)}</td><td><div className="actions"><button className="btn sm danger" onClick={() => del(x.rpid)}>删除</button><button className="btn sm" onClick={() => ban(x.mid, x.member.uname)}>封禁用户</button></div></td></tr>
+            <tr key={x.rpid} className={x.flag || x.report_count ? 'flagged' : ''}><td className="nowrap"><div className="row"><Avatar src={x.member.avatar} size={26} />{x.member.uname}</div></td><td style={{ maxWidth: 420 }}>{flag(x.flag)}{x.content.message}{x.report_count > 0 && <div className="flag-pill">{x.report_count} 条举报 · {(x.report_reasons ?? []).join('、')}</div>}</td><td>{x.archive ? <Link to={`/video/${x.archive.bvid}`} className="clamp-1" style={{ color: 'var(--brand)' }}>{x.archive.title}</Link> : <span className="faint">番剧剧集</span>}</td><td>{x.like}</td><td className="nowrap faint">{dateTimeText(x.ctime)}</td><td><div className="actions"><button className="btn sm danger" onClick={() => del(x.rpid)}>删除</button>{x.report_count > 0 && <button className="btn sm" onClick={() => dismissReport(x.rpid)}>驳回举报</button>}<button className="btn sm" onClick={() => ban(x.mid, x.member.uname)}>封禁用户</button></div></td></tr>
           ) : (
             <tr key={x.id} className={x.flag ? 'flagged' : ''}><td className="nowrap"><div className="row"><Avatar src={x.member.face} size={26} />{x.member.name}</div></td><td>{flag(x.flag)}<span style={{ color: '#' + x.color.toString(16).padStart(6, '0'), textShadow: '0 0 2px #000', fontWeight: 600 }}>{x.content}</span></td><td className="clamp-1">{x.target}</td><td className="mono">{formatDuration(x.progress / 1000)}</td><td className="nowrap faint">{dateTimeText(x.ctime)}</td><td><div className="actions"><button className="btn sm danger" onClick={() => del(x.id)}>删除</button><button className="btn sm" onClick={() => ban(x.mid, x.member.name)}>封禁用户</button></div></td></tr>
           ))}</tbody>
