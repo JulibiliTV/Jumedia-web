@@ -1,0 +1,3 @@
+.blacklist-page .ucard > a, .blacklist-page .ucard > button { flex-shrink: 0; }
+.blacklist-page .blacklist-grid .name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blacklist-pagination { border: 0; padding: 0; margin: 0; min-width: 0; }

@@ -8,6 +8,7 @@ import { Icon } from '../components/Icon'
 import { Empty, ErrorState, Level, Loading, Pager, Segmented, toast, toastError } from '../components/ui'
 import { useAsync, useTitle } from '../lib/hooks'
 import { useSession } from '../lib/session'
+import { Blacklist } from './account/Blacklist'
 
 /** UP 主空间 — acc/info, card, relation, arc/search, top/arc, masterpiece, seasons_series_list, fav folders, followings, bangumi follows. */
 export default function Space() {
@@ -15,8 +16,10 @@ export default function Space() {
   const mid = Number(midParam)
   const nav = useNavigate()
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') ?? 'home'
   const { me } = useSession()
+  const mine = me?.mid === mid
+  const requestedTab = params.get('tab') ?? 'home'
+  const tab = requestedTab === 'blacklist' && !mine ? 'home' : requestedTab
   const profile = useAsync(async () => {
     const [info, card, stat, up] = await Promise.all([juli.accInfo(mid), juli.card(mid), juli.relationStat(mid), jm.upStat(mid).catch(() => null)])
     return { info, card, stat, up: up as { archive: { view: number }; likes: number } | null }
@@ -27,7 +30,6 @@ export default function Space() {
   if (profile.error) return <ErrorState error={profile.error} retry={profile.reload} />
   const { info, card, stat, up } = profile.data!
   const isFollowing = following ?? !!info.is_followed
-  const mine = me?.mid === mid
   const toggle = async () => {
     if (!me) return nav('/login')
     try { await juli.relationModify(mid, !isFollowing); setFollowing(!isFollowing); toast(isFollowing ? '已取消关注' : '关注成功', 'success') } catch (e) { toastError(e) }
@@ -48,6 +50,7 @@ export default function Space() {
         </div>
         <div className="sp-tabs">
           {([{ value: 'home', label: '主页' }, { value: 'video', label: '投稿', count: card.archive_count }, { value: 'collection', label: '合集和系列' }, { value: 'favorite', label: '收藏' }, { value: 'bangumi', label: '追番追剧' }, { value: 'following', label: '关注' }]).map((t: { value: string; label: string; count?: number }) => <button type="button" key={t.value} className={tab === t.value ? 'on' : ''} onClick={() => setParams({ tab: t.value })}>{t.label}{t.count !== undefined && <small>{t.count}</small>}</button>)}
+          {mine && <button type="button" className={tab === 'blacklist' ? 'on' : ''} onClick={() => setParams({ tab: 'blacklist' })}>黑名单</button>}
           <span className="grow" />
           <span className="row" style={{ gap: 24 }}>
             {[['关注', stat.following], ['粉丝', stat.follower], ['获赞', up?.likes ?? card.like_num], ['播放', up?.archive.view ?? 0]].map(([k, v]) => <span key={k as string} className="stack" style={{ alignItems: 'center', fontSize: 12, color: 'var(--text-2)', gap: 0 }}><b style={{ fontSize: 16, color: 'var(--text)' }}>{countText(v as number)}</b>{k}</span>)}
@@ -67,6 +70,7 @@ export default function Space() {
       {tab === 'favorite' && <SpaceFavorites mid={mid} />}
       {tab === 'bangumi' && <SpaceBangumi mid={mid} />}
       {tab === 'following' && <SpaceFollowing mid={mid} />}
+      {mine && tab === 'blacklist' && <Blacklist />}
     </div>
   )
 }

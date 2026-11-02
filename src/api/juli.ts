@@ -82,6 +82,17 @@ export function share(aid: number) { // shareVideo
 }
 export const relationModify = (fid: number, follow: boolean) => post('api', '/x/relation/modify', { ...csrf(), fid, act: follow ? 1 : 2, re_src: 14 }) // setFollowing
 
+export interface BlockedUser {
+  mid: number
+  uname: string
+  face?: string
+  sign?: string
+  mtime: number
+}
+export interface BlacklistPage { list: BlockedUser[]; total: number }
+export const blacklist = (pn: number, ps = 20) => data<BlacklistPage>('api', '/x/relation/blacks', { pn, ps })
+export const unblockUser = (fid: number) => post('api', '/x/relation/modify', { ...csrf(), fid, act: 6, re_src: 11 })
+
 // ---------- 评论 ----------
 export const replies = (oid: number, pn: number, ps = 20, sort = 1) => data('api', '/x/v2/reply', { type: 1, oid, sort, nohot: 0, pn, ps }) // fetchVideoComments (Juli always sends sort=1)
 export const replyThread = (oid: number, root: number, pn: number) => data('api', '/x/v2/reply/reply', { type: 1, oid, root, sort: 1, pn, ps: 20 }) // fetchCommentReplies

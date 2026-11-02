@@ -3,6 +3,7 @@ import { RequireLogin, SiteLayout } from './components/Layout'
 import { ConfirmHost, Empty, ToastHost } from './components/ui'
 import { SessionProvider } from './lib/session'
 import { AccountLayout, FanMedals, Favorites, Following, History, LiveFollowing, MyBangumi, Settings, WatchLater } from './pages/account/Account'
+import { BlacklistRedirect } from './pages/account/Blacklist'
 import { AdminLayout, ArchivesAdmin, Audit, BangumiAdmin, Banners, Dashboard, DataSourcesAdmin, LiveAdmin, Logs, Moderation, Regions, SiteSettings, Users } from './pages/admin/Admin'
 import { Anime, AnimeIndex, BangumiPlay } from './pages/Anime'
 import { Login, Register, TvLogin } from './pages/Auth'
@@ -48,6 +49,7 @@ export default function App() {
               <Route path="live" element={<LiveFollowing />} />
               <Route path="medals" element={<FanMedals />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="blacklist" element={<BlacklistRedirect />} />
             </Route>
             <Route path="creator" element={<RequireLogin><CreatorLayout /></RequireLogin>}>
               <Route index element={<CreatorHome />} />
