@@ -1,5 +1,5 @@
-import { dsMediaURL } from './datasource'
-import { type Catalog, type CatalogImages, type CatalogSeries, embyHlsPath, embyRef, embyStreamURL, getCatalog, setDemoPackage, type DemoPackage } from './emby'
+import { dsMediaURL, resolveSourceImage } from './datasource'
+import { type Catalog, type CatalogImages, type CatalogSeries, embyHlsPath, embyRef, getCatalog, setDemoPackage, type DemoPackage } from './emby'
 
 /**
  * Storage model for the in-browser mock server. Records are kept in their
@@ -103,13 +103,13 @@ export interface DB {
   dmConfig: Record<string, Record<string, string>>; dmFilter: Record<string, { rule: string[]; keyword: string[]; regex: string[] }>
   reservations: Reservation[]
   fanMedals: FanMedal[]
-  banners: Banner[]; liveCaches: LiveCache[]; settings: Record<string, string | number | boolean>
+  banners: Banner[]; liveCaches: LiveCache[]; settings: Record<string, string | number | boolean | number[]>
   logs: { id: number; mid: number; action: string; target: string; ctime: number }[]
   qrcodes: { code: string; status: 'pending' | 'scanned' | 'confirmed'; mid: number; ctime: number }[]
 }
 
 const KEY = 'jumedia.mock.db'
-const VERSION = 18
+const VERSION = 20
 const now = () => Math.floor(Date.now() / 1000)
 
 export function hash(text: string): number {
@@ -384,11 +384,12 @@ export function importDemo(pack: DemoPackage) {
     for (const u of fresh.users) { u.role = 'user'; u.password = 'demo123'; u.username = `demo_${u.mid}_${u.username}`; while (usernames.has(u.username)) u.username += '_'; usernames.add(u.username); u.email = `${u.username}@jumedia.local` }
     fresh.users.unshift(...current.users)
     fresh.sessions = current.sessions
-    fresh.settings = current.settings
+    fresh.settings = { ...current.settings }
     fresh.regions = current.regions
     fresh.liveAreas = current.liveAreas
-    fresh.demoPackage = pack
+    fresh.demoPackage = structuredClone(pack)
     fresh.seq = offset + 30000000
+    upgrade19(fresh)
     localStorage.setItem(KEY, JSON.stringify(fresh))
     db = fresh
   } catch (e) { setDemoPackage(current.demoPackage); throw e }
@@ -414,6 +415,8 @@ export function getDB(): DB {
       if (parsed.version === 15) upgrade15(parsed)
       if (parsed.version === 16) upgrade16(parsed)
       if (parsed.version === 17) upgrade17(parsed)
+      if (parsed.version === 18) upgrade18(parsed)
+      if (parsed.version === 19) upgrade19(parsed)
       if (parsed.version === VERSION) {
         for (const u of parsed.users) if (!u.face) u.face = avatarURL(u.mid)
         const base = seed()
@@ -498,6 +501,105 @@ function upgrade16(d: DB) {
 /** v18: comment counts come from the comments themselves (the seed used to invent them). */
 function upgrade17(d: DB) {
   extend18(d)
+  d.version = 18
+}
+/** v19 was the first T30 draft. Upgrade directly to owner-scoped sources. */
+function upgrade18(d: DB) { d.version = 19 }
+
+/** v20: each demo owner has one ordinary source, including the official PGC owner. */
+function upgrade19(d: DB) {
+  if (Array.isArray(d.settings._demo_datasource_ids)) { d.version = VERSION; return }
+  const pack = d.demoPackage
+  const oldID = Number(d.settings._demo_datasource_id) || 0
+  const old = d.dataSources.find((x) => x.id === oldID)
+  const connection = old ?? pack?.emby
+  if (pack && connection?.url) {
+    const images = new Map<string, { item: string; kind: string; tag: string }>()
+    const imagePath = (id: number, item: string, kind: string, tag = '') => `/media/emby/${item}/image/${kind}?ds=${id}&tag=${encodeURIComponent(tag)}`
+    const add = (raw: string | null, item: string, kind: string) => {
+      if (!raw) return
+      let tag = ''
+      try {
+        const u = new URL(raw); tag = u.searchParams.get('tag') ?? ''
+        const actual = /\/Items\/([A-Za-z0-9_-]+)\/Images\/(Primary|Backdrop|Thumb)(?:\/0)?$/i.exec(u.pathname)
+        if (actual) { item = actual[1]; kind = actual[2][0].toUpperCase() + actual[2].slice(1).toLowerCase() }
+      } catch { /* catalog image without a URL */ }
+      images.set(raw, { item, kind, tag })
+    }
+    for (const x of [...pack.catalog.series, ...pack.catalog.movies]) {
+      for (const [kind, value] of Object.entries(x.images)) add(value, x.id, kind[0].toUpperCase() + kind.slice(1))
+      if ('episodes' in x) for (const e of x.episodes) add(e.image, e.id, 'Primary')
+    }
+    const convert = (v: unknown, id: number): unknown => {
+      if (typeof v === 'string') {
+        const picture = images.get(v)
+        if (picture) return id ? imagePath(id, picture.item, picture.kind, picture.tag) : ''
+        const dsRef = /^embyds:(\d+):([^:]+):([^:]+):direct$/.exec(v)
+        if (oldID && dsRef && Number(dsRef[1]) === oldID) return id ? `embyds:${id}:${dsRef[2]}:${dsRef[3]}:direct` : ''
+        const legacy = /^emby:([A-Za-z0-9_-]+):([A-Za-z0-9_-]+)$/.exec(v)
+        if (legacy) return !id ? '' : `embyds:${id}:${legacy[1]}:${legacy[2]}:direct`
+        try {
+          const u = new URL(v, 'http://mock.local')
+          const m = /^\/media\/emby\/([A-Za-z0-9_-]+)(?:\.mp4|\/hls\/(?:index|main)\.m3u8)$/.exec(u.pathname)
+          if (m && (!u.searchParams.has('ds') || Number(u.searchParams.get('ds')) === oldID) && u.searchParams.get('source')) return !id ? '' : `embyds:${id}:${m[1]}:${u.searchParams.get('source')}:direct`
+          const proxy = /^\/media\/emby\/([A-Za-z0-9_-]+)\/image\/(Primary|Backdrop|Thumb)$/.exec(u.pathname)
+          if (oldID && proxy && Number(u.searchParams.get('ds')) === oldID) return id ? imagePath(id, proxy[1], proxy[2], u.searchParams.get('tag') ?? '') : ''
+          const image = /\/Items\/([A-Za-z0-9_-]+)\/Images\/(Primary|Backdrop|Thumb)(?:\/0)?$/i.exec(u.pathname)
+          if (image && u.origin === new URL(connection.url).origin) { const kind = image[2][0].toUpperCase() + image[2].slice(1).toLowerCase(); return id ? imagePath(id, image[1], kind, u.searchParams.get('tag') ?? '') : '' }
+        } catch { /* not a URL */ }
+        return v
+      }
+      if (Array.isArray(v)) return v.map((x) => convert(x, id))
+      if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, convert(x, id)]))
+      return v
+    }
+
+    const official = Number(d.settings.officialMid)
+    const libraries = new Map<string, string>()
+    for (const x of [...pack.catalog.series, ...pack.catalog.movies]) {
+      libraries.set(x.id, x.library)
+      if ('episodes' in x) for (const e of x.episodes) libraries.set(e.id, x.library)
+    }
+    const owners = new Map<number, Set<string>>()
+    const collect = (mid: number, value: string) => {
+      if (!mid || convert(value, oldID === 1 ? 2 : 1) === value) return
+      const libs = owners.get(mid) ?? new Set<string>()
+      const next = convert(value, oldID === 1 ? 2 : 1) as string
+      const item = /^embyds:\d+:([^:]+):/.exec(next)?.[1] ?? /^\/media\/emby\/([^/]+)\/image\//.exec(next)?.[1]
+      const library = item && libraries.get(item)
+      if (library) libs.add(library)
+      owners.set(mid, libs)
+    }
+    const bannerOwner = (b: Banner) => d.archives.find((a) => b.url === '/video/' + a.bvid)?.mid ?? official
+    for (const a of d.archives) { for (const p of a.pages) collect(a.mid, p.media); collect(a.mid, a.pic) }
+    for (const r of d.rooms) { collect(r.uid, r.media); collect(r.uid, r.cover); collect(r.uid, r.source?.url ?? ''); const a = d.archives.find((a) => a.aid === r.source?.aid); const page = a?.pages.find((p) => p.cid === r.source?.cid); if (page) collect(r.uid, page.media) }
+    for (const s of d.seasons) { collect(official, s.cover); collect(official, s.horizontal); for (const e of s.episodes) { collect(official, e.media); collect(official, e.cover) } }
+    for (const c of d.collections) collect(c.mid, c.cover)
+    for (const u of d.users) { collect(u.mid, u.face); collect(u.mid, u.top_photo) }
+    for (const b of d.banners) collect(bannerOwner(b), b.img)
+    for (const c of d.liveCaches) collect(d.archives.find((a) => a.aid === c.aid)?.mid ?? official, c.media)
+    const byOwner = new Map<number, number>()
+    for (const mid of [...owners.keys()].sort((a, b) => a - b)) {
+      const id = ++d.seq
+      byOwner.set(mid, id)
+      d.dataSources.push({ id, mid, system: false, type: 'emby', name: '演示 Emby', url: connection.url.replace(/\/+$/, ''), username: connection.username, password: connection.password ?? '', server_name: '', server_id: '', libraries: [...owners.get(mid)!].sort().map((name) => ({ id: name, name, type: '', enabled: true, items: 0, collection_id: 0 })), auto_sync: false, status: 'idle', message: '', last_sync: 0, ctime: now() })
+    }
+    const rewrite = <T,>(value: T, mid: number) => convert(value, byOwner.get(mid) ?? 0) as T
+    d.archives = d.archives.map((a) => rewrite(a, a.mid))
+    d.collections = d.collections.map((c) => rewrite(c, c.mid))
+    d.seasons = d.seasons.map((s) => rewrite(s, official))
+    d.rooms = d.rooms.map((r) => rewrite(r, r.uid))
+    d.users = d.users.map((u) => rewrite(u, u.mid))
+    d.banners = d.banners.map((b) => rewrite(b, bannerOwner(b)))
+    d.liveCaches = d.liveCaches.map((c) => rewrite(c, d.archives.find((a) => a.aid === c.aid)?.mid ?? official))
+    d.dataSources = d.dataSources.filter((x) => x.id !== oldID)
+    d.settings._demo_datasource_ids = [...byOwner.values()]
+    pack.emby = { url: '', username: '' }
+  } else if (oldID) {
+    // A deliberately deleted v19 source must not be resurrected.
+    d.settings._demo_datasource_ids = []
+  }
+  delete d.settings._demo_datasource_id
   d.version = VERSION
 }
 function extend18(d: DB) {
@@ -647,7 +749,8 @@ export function nextID(): number {
 
 export function seedDanmaku(cid: number, duration: number) {
   const d = getDB()
-  if (!d.demoPackage || ![...d.archives.flatMap((a) => a.pages), ...d.seasons.flatMap((s) => s.episodes)].some((p) => p.cid === cid && p.media.startsWith('emby:')) || d.seededDanmaku.includes(cid)) return
+  const demoIDs = d.settings._demo_datasource_ids
+  if (!Array.isArray(demoIDs) || ![...d.archives.flatMap((a) => a.pages), ...d.seasons.flatMap((s) => s.episodes)].some((p) => p.cid === cid && demoIDs.some((id) => p.media.startsWith(`embyds:${id}:`))) || d.seededDanmaku.includes(cid)) return
   const r = rng(hash(String(cid)))
   const span = Math.max(10, Math.min(duration, 360))
   for (let i = 0; i < 46; i++) {
@@ -678,9 +781,9 @@ export async function putFile(file: Blob): Promise<string> {
 }
 
 const urls = new Map<string, string>()
-/** `idb:` uploads → blob URL, `emby:` demo media → Emby stream URL, `embyds:` data-source media → stream URL or HLS path. */
+/** Resolve uploads, data-source media and proxied images for the browser mock. */
 export async function resolveMedia(ref: string): Promise<string> {
-  if (ref.startsWith('emby:')) return embyStreamURL(ref)
+  if (/^\/media\/emby\/[^/]+\/image\//.test(ref)) return resolveSourceImage(getDB(), ref)
   if (ref.startsWith('embyds:')) return dsMediaURL(getDB(), ref)
   if (!ref.startsWith('idb:')) return ref
   const cached = urls.get(ref)

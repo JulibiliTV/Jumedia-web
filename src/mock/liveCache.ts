@@ -19,6 +19,7 @@
  * The mock has no ffmpeg: a job advances on a timer, and a finished cache's
  * playlist is stood in by the media's Emby HLS playlist.
  */
+import { parseDsRef } from './datasource'
 import { type DB, type LiveCache, type LiveRoom, save } from './db'
 
 export const CACHE_KEEP = 24 * 3600
@@ -34,7 +35,21 @@ export const cacheKeyOf = (url: string) => /^\/live-cache\/([0-9a-f]{32})\/index
 export const cacheDir = (db: DB) => String(db.settings.liveCacheDir || '') || '{数据目录}/live-cache'
 
 /** The cache for `media` at the current height, if any. */
-export const findCache = (db: DB, media: string) => db.liveCaches.find((x) => x.media === media && x.height === (Number(db.settings.liveTranscodeHeight) || 1080))
+export function findCache(db: DB, media: string) {
+  const height = Number(db.settings.liveTranscodeHeight) || 1080
+  const exact = db.liveCaches.find((x) => x.media === media && x.height === height)
+  if (exact) return exact
+  const ref = parseDsRef(media), ids = db.settings._demo_datasource_ids
+  if (!ref || !Array.isArray(ids) || !ids.includes(ref.ds)) return undefined
+  const own = db.dataSources.find((x) => x.id === ref.ds)
+  if (!own) return undefined
+  return db.liveCaches.find((cache) => {
+    const otherRef = parseDsRef(cache.media)
+    if (cache.status !== 'ready' || cache.height !== height || !otherRef || !ids.includes(otherRef.ds) || otherRef.item !== ref.item || otherRef.source !== ref.source || otherRef.container !== ref.container) return false
+    const other = db.dataSources.find((x) => x.id === otherRef.ds)
+    return other && own.url.replace(/\/+$/, '') === other.url.replace(/\/+$/, '') && own.username === other.username && own.password === other.password
+  })
+}
 
 /** The cache for `media` at the current height, queued if there is none yet. */
 export function ensureCache(db: DB, media: string, aid: number, cid: number, duration: number): LiveCache {

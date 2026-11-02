@@ -356,9 +356,19 @@ export const dsHlsPath = (item: string, source: string, ds: number) => `/media/e
 export async function dsMediaURL(db: DB, ref: string): Promise<string> {
   const r = parseDsRef(ref)
   const ds = r && db.dataSources.find((x) => x.id === r.ds)
-  if (!r || !ds) return ''
+  if (!r || !ds || !sourceMediaReferenced(db, r.ds, r.item, r.source, r.container)) return ''
   const s = await sessionFor(ds)
   return `${s.base}/Videos/${r.item}/stream.${r.container ?? 'mp4'}?Static=true&MediaSourceId=${encodeURIComponent(r.source)}&DeviceId=${DEVICE}&api_key=${s.token}`
+}
+
+/** Effective content grants access; a cache or stale video room cannot grant it. */
+function sourceMediaReferenced(db: DB, ds: number, item: string, source: string, container?: string | null) {
+  const refs = [
+    ...db.archives.filter((a) => a.state !== -100 && (!a.origin?.ds || a.origin.ds === ds)).flatMap((a) => a.pages.map((p) => p.media)),
+    ...db.seasons.filter((s) => s.state !== -100).flatMap((s) => s.episodes.map((e) => e.media)),
+    ...db.rooms.filter((r) => r.source?.type !== 'video' && !r.source?.aid && !r.source?.cid).flatMap((r) => [r.media, r.source?.url ?? '']),
+  ]
+  return refs.some((ref) => { const r = parseDsRef(ref); return r?.ds === ds && r.item === item && r.source === source && (container === undefined || r.container === container) })
 }
 
 const playSessions = new Map<string, Promise<string>>()
@@ -368,7 +378,7 @@ export async function dsPlaylist(db: DB, path: string, source: string, dsID: num
   const ds = db.dataSources.find((x) => x.id === dsID)
   if (!m || !ds) return null
   const [, item, kind] = m
-  if (!db.archives.some((a) => a.origin?.ds === dsID && a.state !== -100 && a.pages.some((p) => parseDsRef(p.media)?.item === item && parseDsRef(p.media)?.source === source))) return null
+  if (!sourceMediaReferenced(db, dsID, item, source)) return null
   if (kind === 'index') return `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=5000000,CODECS="avc1.640028,mp4a.40.2"\nmain.m3u8?source=${encodeURIComponent(source)}&ds=${dsID}\n`
   const s = await sessionFor(ds)
   const key = `${dsID}:${item}:${source}`
@@ -402,4 +412,19 @@ export function originJSON(db: DB, a: Pick<Archive, 'origin' | 'state'>) {
   if (!o) return null
   const ds = db.dataSources.find((x) => x.id === o.ds)
   return { type: o.type, datasource_id: o.ds, datasource_name: ds?.name ?? '', item_id: o.item, library: ds?.libraries.find((l) => l.id === o.library)?.name ?? '', locked: o.locked, meta: o.meta, missing: a.state === -6 }
+}
+
+/** The browser cannot serve native <img> requests; render proxy images as local blobs. */
+export async function resolveSourceImage(db: DB, ref: string): Promise<string> {
+  const u = new URL(ref, location.origin)
+  const m = /^\/media\/emby\/([A-Za-z0-9_-]+)\/image\/(Primary|Backdrop|Thumb)$/.exec(u.pathname)
+  const ds = db.dataSources.find((x) => x.id === Number(u.searchParams.get('ds')))
+  if (!m || !ds) return ''
+  const stored = [...db.archives.filter((x) => !x.origin?.ds || x.origin.ds === ds.id).map((x) => x.pic), ...db.collections.filter((x) => !x.origin?.ds || x.origin.ds === ds.id).map((x) => x.cover), ...db.seasons.filter((x) => x.state !== -100).flatMap((x) => [x.cover, x.horizontal, ...x.episodes.map((e) => e.cover)]), ...db.rooms.map((x) => x.cover), ...db.users.flatMap((x) => [x.face, x.top_photo]), ...db.banners.map((x) => x.img)]
+  if (!stored.includes(ref)) return ''
+  const s = await sessionFor(ds)
+  const query = new URLSearchParams({ tag: u.searchParams.get('tag') ?? '', maxWidth: '1280' })
+  const response = await fetcher(`${s.base}/Items/${m[1]}/Images/${m[2]}?${query}`, { headers: { 'X-Emby-Token': s.token } })
+  if (!response.ok || !response.headers.get('Content-Type')?.startsWith('image/')) return ''
+  return URL.createObjectURL(await response.blob())
 }

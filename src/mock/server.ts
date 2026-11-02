@@ -2,7 +2,7 @@ import { formatDuration } from '../api/normalize'
 import { Writer } from '../api/protobuf'
 import { type Archive, type ArchiveField, type Banner, type CollectionField, type DataSource, type DB, type LiveRoom, type StreamSource, type User, av2bv, avatarURL, bv2av, getDB, importDemo, LIVE_CHATTER, nextID, putFile, resetDB, resolveMedia, save, seedDanmaku } from './db'
 import { dataSourceJSON, dsHlsPath, dsPlaylist, embyBase, forgetSession, mediaFormat, originJSON, parseDsRef, privateHost, probeSource, purgeSource, setSourceFetcher, SourceError, syncSource } from './datasource'
-import { embyHlsPath, embyPlaylist, loadEmby, parseDemoPackage } from './emby'
+import { parseDemoPackage } from './emby'
 import { cacheDir, cacheJSON, cacheKeyOf, cachePath, ensureCache, findCache, notReady, retryCache, roomCache, tickCaches, TRANSCODE_HEIGHTS } from './liveCache'
 import { liveWindow, parsePlaylist, passthrough, type Playlist, relayMaster } from './hlsRelay'
 import { archiveById, arcView, compactCount, feedCard, followerCount, followingCount, indexShow, levelInfo, owner, published, regionName, replyJSON, roomCard, seasonBadge, seasonCard, spaceArc, userById, userFace } from './render'
@@ -1558,7 +1558,7 @@ const routes: Record<string, Handler> = {
     return null
   },
   '/x/admin/banner/delete': (c) => { admin(c); c.db.banners = c.db.banners.filter((b) => b.id !== int(c.p.id)); return null },
-  '/x/admin/settings': (c) => { admin(c); return c.db.settings },
+  '/x/admin/settings': (c) => { admin(c); return Object.fromEntries(Object.entries(c.db.settings).filter(([k]) => !k.startsWith('_demo_'))) },
   /**
    * Jumedia: start-up parameters (read-only; changing them needs a restart) and the start-up
    * values behind the runtime overrides in settings. The browser mock has no process, so these are placeholders.
@@ -1586,7 +1586,6 @@ const routes: Record<string, Handler> = {
     if ((file as File).size > 32 * 1024 * 1024) fail(-400, '演示数据包格式无效')
     try { importDemo(parseDemoPackage(await (file as File).text())) } catch (e) { fail(-400, e instanceof Error ? e.message : '演示数据包格式无效') }
     queueRelayedCaches(getDB())
-    await loadEmby(nativeFetch)
     return null
   },
   '/x/admin/settings/save': (c) => {
@@ -1606,7 +1605,7 @@ const routes: Record<string, Handler> = {
     const services = serviceInput(c)
     if (services) Object.assign(c.p, services)
     for (const [k, v] of Object.entries(c.p)) {
-      if (k === 'csrf' || k === 'biliCSRF' || k === 'serviceMtime' || !(k in c.db.settings)) continue
+      if (k.startsWith('_demo_') || k === 'csrf' || k === 'biliCSRF' || k === 'serviceMtime' || !(k in c.db.settings)) continue
       const cur = c.db.settings[k]
       c.db.settings[k] = typeof cur === 'boolean' ? v === 'true' : typeof cur === 'number' ? Number(v) : v
     }
@@ -1754,7 +1753,6 @@ function editOrigin(c: Ctx, u: User, a: Archive, title: string) {
 function mediaHlsPath(media: string) {
   const ds = parseDsRef(media)
   if (ds) return dsHlsPath(ds.item, ds.source, ds.ds)
-  if (media.startsWith('emby:')) { const [, item, source] = media.split(':'); return embyHlsPath(item, source) }
   return ''
 }
 function relayableVideos(c: Ctx, mid: number) {
@@ -2011,7 +2009,7 @@ async function loadPlaylist(address: string, maxAge: number): Promise<{ list: Pl
   let text = cached && Date.now() - cached.at < maxAge ? cached.text : ''
   if (!text && url.origin === location.origin && url.pathname.startsWith('/media/emby/')) {
     const source = url.searchParams.get('source') ?? '', ds = Number(url.searchParams.get('ds') ?? 0)
-    const emby = await (ds ? dsPlaylist(getDB(), url.pathname, source, ds) : embyPlaylist(nativeFetch, url.pathname, source)).catch(() => null)
+    const emby = await (ds ? dsPlaylist(getDB(), url.pathname, source, ds) : Promise.resolve(null)).catch(() => null)
     if (!emby) fail(-400, '无法读取媒体库播放列表')
     playlistCache.set(url.href, { at: Date.now(), text: emby!, url: url.href })
     text = emby!
@@ -2090,7 +2088,7 @@ function resolveRoute(path: string): Handler | undefined {
   if (routes[path]) return routes[path]
   const emby = /^\/media\/emby\/[^/]+\/hls\/(index|main)\.m3u8$/.exec(path)
   if (emby) return async (c) => {
-    const text = await (c.p.ds ? dsPlaylist(c.db, path, c.p.source ?? '', int(c.p.ds)) : embyPlaylist(nativeFetch, path, c.p.source ?? '')).catch(() => null)
+    const text = await (c.p.ds ? dsPlaylist(c.db, path, c.p.source ?? '', int(c.p.ds)) : Promise.resolve(null)).catch(() => null)
     return { __text: text ?? '#EXTM3U\n', __status: text ? 200 : 404 }
   }
   const relay = /^\/live-relay\/(\d+)\/(?:index|v(\d+))\.m3u8$/.exec(path)
@@ -2107,10 +2105,10 @@ function resolveRoute(path: string): Handler | undefined {
 /** Uploaded files are stored as `idb:` refs; responses carry blob URLs instead. */
 async function withUploads(body: unknown): Promise<unknown> {
   const refs = new Set<string>()
-  const walk = (v: unknown) => { if (typeof v === 'string') { if (v.startsWith('idb:')) refs.add(v) } else if (v && typeof v === 'object') for (const x of Object.values(v)) walk(x) }
+  const walk = (v: unknown) => { if (typeof v === 'string') { if (v.startsWith('idb:') || /^\/media\/emby\/[^/]+\/image\//.test(v)) refs.add(v) } else if (v && typeof v === 'object') for (const x of Object.values(v)) walk(x) }
   walk(body)
   if (!refs.size) return body
-  const urls = new Map(await Promise.all([...refs].map(async (r) => [r, await resolveMedia(r)] as const)))
+  const urls = new Map(await Promise.all([...refs].map(async (r) => [r, await resolveMedia(r).catch(() => '')] as const)))
   const swap = (v: unknown): unknown => (typeof v === 'string' ? urls.get(v) ?? v : Array.isArray(v) ? v.map(swap) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, swap(x)])) : v)
   return swap(body)
 }
@@ -2120,7 +2118,6 @@ export async function installMockServer() {
   nativeFetch = native
   setSourceFetcher(native)
   getDB()
-  await loadEmby(native)
   // A reload interrupts in-flight syncs (the server marks them the same way on start-up).
   for (const ds of getDB().dataSources) if (ds.status === 'syncing') Object.assign(ds, { status: 'error', message: '同步被中断，请重新同步' })
   queueRelayedCaches(getDB())
