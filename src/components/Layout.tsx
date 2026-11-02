@@ -181,7 +181,7 @@ export function Header({ wide = false }: { wide?: boolean }) {
         <SearchBox />
         <div className="bh-actions">
           {me && <Link to="/dynamic" className="bh-icon" aria-label={updates.data ? `动态，${updates.data} 条新内容` : '动态'}><Icon name="bell" size={20} />{!!updates.data && <span className="dot">{updates.data}</span>}</Link>}
-          <Link to="/creator/upload" className="bh-upload"><Icon name="upload" size={16} />投稿</Link>
+          <Link to="/creator/upload" className="bh-upload" aria-label="投稿"><Icon name="upload" size={16} /><span>投稿</span></Link>
           <AvatarMenu />
         </div>
       </div>

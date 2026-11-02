@@ -18,7 +18,11 @@ export function Carousel({ slides, wide = false, cta, below = false }: { slides:
     const t = setInterval(() => setI((x) => (x + 1) % slides.length), 5000)
     return () => clearInterval(t)
   }, [slides.length])
-  if (!slides.length) return <div className={`carousel skeleton ${wide ? 'wide' : ''}`} />
+  if (!slides.length) {
+    const skeleton = <div className={`carousel skeleton ${wide ? 'wide' : ''}`} />
+    // Keep the title and author rows while loading so the carousel does not resize when slides arrive.
+    return below ? <>{skeleton}<div className="title skeleton" /><div className="by skeleton" style={{ width: '40%' }} /></> : skeleton
+  }
   const dots = <div className="dots">{slides.map((s, k) => <button key={s.id} className={k === i ? 'on' : ''} onClick={() => setI(k)} aria-label={`第 ${k + 1} 张`} />)}</div>
   const box = (
     <div className={`carousel ${wide ? 'wide' : ''}`}>
@@ -115,7 +119,8 @@ export default function Home() {
       <div className="g4">
         <div className="feature">{slides.length > 0 && <span className="pick">编辑推荐</span>}<Carousel slides={slides} below /></div>
         {top.length ? top.map((it) => <VideoCard key={it.id} it={it} actions={dislike(it)} />)
-          : Array.from({ length: 4 }, (_, k) => <div key={k} className="vcard"><div className="skeleton" style={{ aspectRatio: '16/10' }} /><div className="skeleton" style={{ height: 14 }} /><div className="skeleton" style={{ height: 12, width: '50%' }} /></div>)}
+          // Same classes as VideoCard so the placeholder rows are as tall as the real ones and the feature carousel keeps its size.
+          : Array.from({ length: 4 }, (_, k) => <div key={k} className="vcard"><div className="thumb skeleton" /><div className="title skeleton" /><div className="by skeleton" style={{ width: '50%' }} /></div>)}
       </div>
 
       {!!anime.data?.length && (

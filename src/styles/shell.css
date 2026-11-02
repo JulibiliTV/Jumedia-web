@@ -128,7 +128,8 @@
 @media (max-width: 760px) {
   .bh-inner { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; padding: 0 12px; }
   .bh-inner .logo-type { display: none; }
-  .bh-upload { width: 36px; padding: 0; justify-content: center; font-size: 0; }
+  .bh-upload { width: 36px; padding: 0; justify-content: center; gap: 0; }
+  .bh-upload span { display: none; }
   .bh-icon { display: none; }
   .frame { padding: 12px 16px 48px; gap: 16px; }
   .frame > .side:has(.sidebar) { display: none; }
