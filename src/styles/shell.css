@@ -136,7 +136,7 @@
   .mnav { display: flex; gap: 6px; overflow-x: auto; padding: 8px 16px 0; scrollbar-width: none; }
   .mnav a { flex: none; height: 32px; padding: 0 14px; border-radius: 16px; background: var(--surface-2); color: var(--text-2); font-size: 13px; display: inline-flex; align-items: center; }
   .mnav a.active { background: var(--brand); color: #fff; font-weight: 600; }
-  .frame > .side:has(.console-nav) { flex-basis: 100%; max-width: none; }
+  .frame > .side:has(.console-nav) { flex-basis: 100%; min-width: 0; max-width: 100%; }
   .console-nav { position: static; flex-direction: row; overflow-x: auto; scrollbar-width: none; }
   .console-nav .who, .console-nav .group, .console-nav .sep, .console-nav .cta { display: none; }
   .console-nav a.item { flex: none; }
