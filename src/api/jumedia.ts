@@ -131,11 +131,21 @@ export function dataSourceAPI(scope: 'web' | 'admin') {
 export const dataSources = () => data('api', '/x/web/datasources')
 
 // ---------- 管理后台 ----------
+export interface DanmakuSync {
+  cid: number; aid: number; status: 'idle' | 'pending' | 'fetching' | 'ready' | 'unmatched' | 'error'
+  message: string; episode_id: number; anime_title: string; episode_title: string; count: number; updated_at: number
+}
+export interface SyncedDanmaku { id: number; cid: number; progress: number; mode: number; fontsize: number; color: number; content: string; ctime: number; weight: number }
+export interface ArchiveDanmaku {
+  pages: { cid: number; part: string; sync: DanmakuSync }[]; sync: DanmakuSync; list: SyncedDanmaku[]
+  page: { pn: number; ps: number; total: number }
+}
 export const admin = {
   dashboard: () => data('api', '/x/admin/dashboard'),
   users: (p: { pn: number; keyword?: string; role?: string; status?: string }) => data('api', '/x/admin/users', { ps: 20, ...p }),
   userUpdate: (p: { mid: number; role?: string; status?: number; coins?: number }) => post('api', '/x/admin/user/update', { ...csrf(), ...p }),
   archives: (p: { pn: number; state?: string; keyword?: string; tid?: number }) => data('api', '/x/admin/archives', { ps: 20, ...p }),
+  archiveDanmaku: (aid: number, cid: number, pn = 1) => data<ArchiveDanmaku>('api', '/x/admin/archive/danmaku', { aid, cid, pn, ps: 20 }),
   archiveAudit: (aid: number, state: number, reason = '') => post('api', '/x/admin/archive/audit', { ...csrf(), aid, state, reason }),
   archiveDelete: (aid: number) => post('api', '/x/admin/archive/delete', { ...csrf(), aid }),
   seasons: (p: { pn: number; season_type?: number; keyword?: string }) => data('api', '/x/admin/seasons', { ps: 20, ...p }),

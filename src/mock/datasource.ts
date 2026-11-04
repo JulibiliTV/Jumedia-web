@@ -1,4 +1,5 @@
 import { userFace } from './render'
+import { queueMockDanmaku } from './dandanplay'
 import { type Archive, type ArchiveField, type ArchiveOrigin, av2bv, type DataSource, type DataSourceLibrary, type DB, type Page, type Region, save } from './db'
 
 /**
@@ -304,6 +305,7 @@ export async function syncSource(db: DB, ds: DataSource, nextID: () => number): 
           }
           db.archives.push((a = created))
         }
+        queueMockDanmaku(db, a)
         seen.add(a.aid)
         aids.push(a.aid)
       })

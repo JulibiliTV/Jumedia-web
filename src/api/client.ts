@@ -134,7 +134,11 @@ export const post = <T = any>(host: Host, path: string, params: Params = {}, opt
   envelope<T>(host, path, params, { ...options, method: 'POST' })
 
 export async function bytes(host: Host, path: string, params: Params): Promise<ArrayBuffer> {
-  const response = await fetch(hosts[host] + path + '?' + encode(clean(params)), { credentials: 'include' })
+  return (await bytesResponse(host, path, params)).arrayBuffer()
+}
+
+export async function bytesResponse(host: Host, path: string, params: Params, signal?: AbortSignal): Promise<Response> {
+  const response = await fetch(hosts[host] + path + '?' + encode(clean(params)), { credentials: 'include', cache: 'no-store', signal })
   if (!response.ok) throw new ApiError(response.status, '弹幕加载失败')
-  return response.arrayBuffer()
+  return response
 }

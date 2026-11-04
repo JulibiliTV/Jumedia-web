@@ -1,13 +1,13 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { resolveAssetURL } from '../../lib/assets'
 import { post } from '../../api/client'
 import { admin } from '../../api/jumedia'
 import * as jm from '../../api/jumedia'
 import * as juli from '../../api/juli'
 import { countText, dateTimeText, formatDuration } from '../../api/normalize'
 import { AreaChart } from '../../components/Chart'
+import { AuditMedia } from '../../components/AuditMedia'
 import { Icon } from '../../components/Icon'
 import { ConsoleFrame, ConsoleNav, Header } from '../../components/Layout'
 import { type DataSource, DataSourceCard, DataSourceEditor, useSyncPolling } from '../../components/DataSources'
@@ -203,10 +203,8 @@ export function Audit() {
   const d = useAsync(() => admin.archives({ pn: 1, state: '-1' }), [])
   const [current, setCurrent] = useState<any>()
   const [reason, setReason] = useState('')
-  const [media, setMedia] = useState<string>()
   const list: any[] = d.data?.list ?? []
-  const item = current ?? list[0]
-  useEffect(() => { setMedia(undefined); if (item?.media) resolveAssetURL(item.media).then(setMedia) }, [item?.aid]) // eslint-disable-line react-hooks/exhaustive-deps
+  const item = list.find((a) => a.aid === current?.aid) ?? list[0]
   const decide = async (state: number) => {
     if (!item) return
     if (state === -2 && !reason.trim()) return toast('请填写退回原因', 'error')
@@ -226,7 +224,7 @@ export function Audit() {
       </div>
       {item && (
         <div className="panel audit-preview stack">
-          {media ? <video src={media} controls /> : <div className="skeleton" style={{ aspectRatio: '16/9' }} />}
+          <AuditMedia key={item.aid} aid={item.aid} pages={item.pages ?? []} emby={item.origin?.type === 'emby'} />
           <h2 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.4 }}>{item.title}</h2>
           <div className="row wrap" style={{ fontSize: 13 }}><span className="badge">{item.tname}</span><span className="badge">{item.copyright === 1 ? '自制' : '转载'}</span>{item.tag.split(',').filter(Boolean).map((t: string) => <span key={t} className="badge brand">{t}</span>)}</div>
           <p className="muted" style={{ whiteSpace: 'pre-wrap', fontSize: 13.5 }}>{item.desc || '（无简介）'}</p>
@@ -725,6 +723,19 @@ export function SiteSettings() {
             <div className="field"><label>同步时每秒请求数</label><input className="input" type="number" min={1} max={50} value={f.dataSourceSyncRate} onChange={(e) => setF({ ...f, dataSourceSyncRate: +e.target.value })} /><span className="hint">每个数据源单独计算，避免同步时请求过多压垮 Emby；播放不受限制</span></div>
             <div className="field"><label>同步并发请求数</label><input className="input" type="number" min={1} max={8} value={f.dataSourceSyncConcurrency} onChange={(e) => setF({ ...f, dataSourceSyncConcurrency: +e.target.value })} /><span className="hint">每个数据源同时进行的请求上限</span></div>
           </div>
+        </div>
+      </div>
+      <div className="panel set-sec">
+        <div className="panel-title"><h3>弹弹play 弹幕</h3></div>
+        <div className="stack">
+          <label className="row between"><div><b>同步 Emby 视频弹幕</b><div className="faint" style={{ fontSize: 13 }}>媒体资源同步后，后台按分集匹配并获取弹幕，可在稿件审核中预览</div></div><Switch label="同步 Emby 视频弹幕" on={f.dandanplayEnabled ?? false} onChange={(v) => setF({ ...f, dandanplayEnabled: v })} /></label>
+          <div className="form-grid">
+            <label className="field span-2">接口地址<input className="input mono" type="url" value={f.dandanplayApi ?? 'https://api.dandanplay.net'} onChange={(e) => setF({ ...f, dandanplayApi: e.target.value })} /><span className="hint">支持自部署服务，可包含 token 路径或以 /api/v2 结尾</span></label>
+            <label className="field">App ID（可选）<input className="input mono" value={f.dandanplayAppId ?? ''} autoComplete="off" onChange={(e) => setF({ ...f, dandanplayAppId: e.target.value })} /></label>
+            <label className="field">App Secret（可选）<input className="input mono" type="password" value={f.dandanplayAppSecret ?? ''} autoComplete="new-password" placeholder={f.dandanplayHasSecret ? '已设置，留空保持不变' : '无需签名的服务可留空'} onChange={(e) => setF({ ...f, dandanplayAppSecret: e.target.value })} /></label>
+          </div>
+          {f.dandanplayHasSecret && <label className="row"><input type="checkbox" checked={f.dandanplaySecretClear ?? false} onChange={(e) => setF({ ...f, dandanplaySecretClear: e.target.checked })} />清除已保存的 App Secret</label>}
+          <p className="faint" style={{ fontSize: 13 }}>无需签名的服务只需填写地址；需要签名时同时填写 App ID 和 App Secret。启用后，播放 Emby 视频时会自动获取并合并弹幕。</p>
         </div>
       </div>
       <div className="panel set-sec">

@@ -1,5 +1,6 @@
 import { formatDuration } from '../api/normalize'
 import { Writer } from '../api/protobuf'
+import { idleSync, requestMockDanmaku } from './dandanplay'
 import { type Archive, type ArchiveField, type Banner, type CollectionField, type DataSource, type DB, type LiveRoom, type StreamSource, type User, av2bv, avatarURL, bv2av, getDB, importDemo, LIVE_CHATTER, nextID, putFile, resetDB, resolveMedia, save, seedDanmaku } from './db'
 import { dataSourceJSON, dsHlsPath, dsPlaylist, embyBase, forgetSession, mediaFormat, originJSON, parseDsRef, privateHost, probeSource, purgeSource, setSourceFetcher, SourceError, syncSource } from './datasource'
 import { parseDemoPackage } from './emby'
@@ -165,7 +166,7 @@ function dmBytes(db: DB, cid: number, index: number) {
   seedDanmaku(cid, found ? ('p' in found ? found.p!.duration : found.e!.duration) : 24)
   const lo = (index - 1) * 360000, hi = index * 360000
   const w = new Writer()
-  for (const d of db.danmaku.filter((x) => x.cid === cid && x.progress >= lo && x.progress < hi)) {
+  for (const d of [...db.danmaku, ...(db.dandanplay?.[cid]?.comments ?? [])].filter((x) => x.cid === cid && x.progress >= lo && x.progress < hi)) {
     w.bytes(1, new Writer().uint(1, d.id).uint(2, d.progress).uint(3, d.mode).uint(4, d.fontsize).uint(5, d.color).string(6, String(d.mid)).string(7, d.content).uint(8, d.ctime).uint(9, d.weight).string(12, String(d.id)).finish())
   }
   return w.finish()
@@ -703,7 +704,10 @@ const routes: Record<string, Handler> = {
   '/x/v2/reply/hate': (c) => react(c, 'haters'),
 
   // ---------------- 弹幕 ----------------
-  '/x/v2/dm/list/seg.so': (c) => ({ __bytes: dmBytes(c.db, int(c.p.oid), int(c.p.segment_index, 1)) }),
+  '/x/v2/dm/list/seg.so': (c) => {
+    const pending = requestMockDanmaku(c.db, int(c.p.oid))
+    return { __bytes: dmBytes(c.db, int(c.p.oid), int(c.p.segment_index, 1)), __headers: { 'X-Jumedia-Danmaku-Pending': String(pending), 'Cache-Control': 'no-store' } }
+  },
   '/x/v2/dm/web/view': (c) => ({ __bytes: dmView(c.db, c.me?.mid) }),
   '/x/v2/dm/web/config': (c) => {
     const u = csrf(c)
@@ -1442,7 +1446,17 @@ const routes: Record<string, Handler> = {
     const kw = c.p.keyword ?? '', state = c.p.state ?? ''
     const list = c.db.archives.filter((a) => (state === '' ? a.state !== -100 && a.state !== -20 : a.state === int(state)) && (!kw || searchMatch(a.title + a.bvid + owner(a.mid).name, kw)) && (!int(c.p.tid) || a.tid === int(c.p.tid))).sort((a, b) => b.ctime - a.ctime)
     const pn = int(c.p.pn, 1), ps = int(c.p.ps, 20)
-    return { list: page(list, pn, ps).map((a) => ({ ...arcView(a), reason: a.reason, media: a.pages[0]?.media })), page: { pn, ps, total: list.length }, counts: { pending: c.db.archives.filter((a) => a.state === -1).length, rejected: c.db.archives.filter((a) => a.state === -2).length } }
+    return { list: page(list, pn, ps).map((a) => ({ ...arcView(a), origin: a.origin, reason: a.reason, media: a.pages[0]?.media })), page: { pn, ps, total: list.length }, counts: { pending: c.db.archives.filter((a) => a.state === -1).length, rejected: c.db.archives.filter((a) => a.state === -2).length } }
+  },
+  '/x/admin/archive/danmaku': (c) => {
+    admin(c)
+    const a = archiveById(int(c.p.aid))
+    if (!a || !a.pages.length) return fail(-404, '稿件不存在')
+    const cid = int(c.p.cid) || a.pages[0].cid
+    if (!a.pages.some((p) => p.cid === cid)) return fail(-404, '分集不存在')
+    const cached = c.db.dandanplay?.[cid], pn = int(c.p.pn, 1), ps = int(c.p.ps, 20)
+    const comments = cached?.comments ?? []
+    return { pages: a.pages.map((p) => ({ cid: p.cid, part: p.part, sync: c.db.dandanplay?.[p.cid]?.sync ?? idleSync(a.aid, p.cid) })), sync: cached?.sync ?? idleSync(a.aid, cid), list: page(comments, pn, ps), page: { pn, ps, total: comments.length } }
   },
   '/x/admin/archive/audit': (c) => {
     admin(c)
@@ -1622,7 +1636,7 @@ const routes: Record<string, Handler> = {
     return null
   },
   '/x/admin/banner/delete': (c) => { admin(c); c.db.banners = c.db.banners.filter((b) => b.id !== int(c.p.id)); return null },
-  '/x/admin/settings': (c) => { admin(c); return Object.fromEntries(Object.entries(c.db.settings).filter(([k]) => !k.startsWith('_demo_'))) },
+  '/x/admin/settings': (c) => { admin(c); return { ...Object.fromEntries(Object.entries(c.db.settings).filter(([k]) => !k.startsWith('_demo_') && !k.startsWith('_dandanplay_'))), dandanplayHasSecret: !!c.db.settings._dandanplay_has_secret } },
   /**
    * Jumedia: start-up parameters (read-only; changing them needs a restart) and the start-up
    * values behind the runtime overrides in settings. The browser mock has no process, so these are placeholders.
@@ -1673,8 +1687,19 @@ const routes: Record<string, Handler> = {
     const before = { ...c.db.settings }
     const services = serviceInput(c)
     if (services) Object.assign(c.p, services)
+    if (c.p.dandanplayEnabled !== undefined && !['true', 'false'].includes(c.p.dandanplayEnabled)) fail(-400, '弹幕同步开关无效')
+    if (c.p.dandanplayApi !== undefined) {
+      const address = c.p.dandanplayApi.trim().replace(/\/+$/, '') || 'https://api.dandanplay.net'
+      try { const u = new URL(address); if (!['http:', 'https:'].includes(u.protocol) || !u.hostname || u.username || u.password || u.search || u.hash) throw new Error() } catch { fail(-400, '弹弹play 接口地址无效') }
+      c.p.dandanplayApi = address
+    }
+    if (c.p.dandanplayAppId !== undefined) c.p.dandanplayAppId = c.p.dandanplayAppId.trim()
+    const hasSecret = !!c.p.dandanplayAppSecret?.trim() || (c.p.dandanplaySecretClear !== 'true' && !!c.db.settings._dandanplay_has_secret)
+    const enabled = c.p.dandanplayEnabled === undefined ? c.db.settings.dandanplayEnabled : c.p.dandanplayEnabled === 'true'
+    if (enabled && Boolean(c.p.dandanplayAppId ?? c.db.settings.dandanplayAppId) !== hasSecret) fail(-400, 'App ID 和 App Secret 请同时填写，或同时留空以使用无需签名的服务')
+    c.db.settings._dandanplay_has_secret = hasSecret
     for (const [k, v] of Object.entries(c.p)) {
-      if (k.startsWith('_demo_') || k === 'csrf' || k === 'biliCSRF' || k === 'serviceMtime' || !(k in c.db.settings)) continue
+      if (k.startsWith('_demo_') || k.startsWith('_dandanplay_') || k === 'csrf' || k === 'biliCSRF' || k === 'serviceMtime' || !(k in c.db.settings)) continue
       const cur = c.db.settings[k]
       c.db.settings[k] = typeof cur === 'boolean' ? v === 'true' : typeof cur === 'number' ? Number(v) : v
     }
@@ -2211,7 +2236,7 @@ export async function installMockServer() {
       // The admin's public origin (`serverPublicOrigin`) replaces the page origin in generated addresses.
       const out = (await handler({ p, method, form, me, db, origin: String(db.settings.serverPublicOrigin || '') || location.origin })) as Record<string, unknown> | null
       save()
-      if (out && typeof out === 'object' && '__bytes' in out) return new Response(out.__bytes as Uint8Array, { headers: { 'Content-Type': 'application/octet-stream' } })
+      if (out && typeof out === 'object' && '__bytes' in out) return new Response(out.__bytes as Uint8Array, { headers: { 'Content-Type': 'application/octet-stream', ...(out.__headers as Record<string, string> ?? {}) } })
       if (out && typeof out === 'object' && '__text' in out) return new Response(out.__text as string, { status: (out.__status as number) ?? 200, headers: { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-cache' } })
       if (out && typeof out === 'object' && '__raw' in out) body = out.__raw
       else if (out && typeof out === 'object' && '__root' in out) body = out.__root

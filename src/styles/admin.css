@@ -28,6 +28,9 @@
 .audit-item img { width: 120px; aspect-ratio: 16 / 10; border-radius: 8px; object-fit: cover; }
 .audit-preview { position: sticky; top: 84px; }
 .audit-preview video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; }
+.audit-preview .ctrl-row { flex-wrap: wrap; }
+.audit-preview .ctrl-row .time { white-space: nowrap; }
+.audit-preview .dm-bar form { min-width: 0; flex-basis: 240px; }
 .ep-editor { display: grid; grid-template-columns: 56px 1fr 1fr 110px 150px 36px 36px; gap: 8px; align-items: center; margin-bottom: 8px; }
 .ep-editor .ep-extra { grid-column: 1 / -1; display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 12px; border-radius: 10px; background: var(--bg); }
 .ep-editor .btn.icon.on { color: var(--brand); }

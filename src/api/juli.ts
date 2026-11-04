@@ -1,4 +1,4 @@
-import { accessKey, bytes, csrf, data, envelope, post } from './client'
+import { accessKey, bytes, bytesResponse, csrf, data, envelope, post } from './client'
 import { decodeSegment, decodeWebView, remoteParameters, type DanmakuSettings } from './protobuf'
 
 /**
@@ -102,7 +102,11 @@ export const replyReact = (oid: number, rpid: number, hate: boolean, on: boolean
   post('api', '/x/v2/reply/' + (hate ? 'hate' : 'action'), { ...csrf(), type: 1, oid, rpid, action: on ? 1 : 0 })
 
 // ---------- 弹幕 ----------
-export const dmSegment = async (cid: number, index: number) => decodeSegment(await bytes('api', '/x/v2/dm/list/seg.so', { type: 1, oid: cid, segment_index: index })) // fetchDanmakuSegment
+export const dmSegment = async (cid: number, index: number) => (await dmSegmentResult(cid, index)).cues
+export async function dmSegmentResult(cid: number, index: number, signal?: AbortSignal) {
+  const response = await bytesResponse('api', '/x/v2/dm/list/seg.so', { type: 1, oid: cid, segment_index: index }, signal)
+  return { cues: decodeSegment(await response.arrayBuffer()), pending: response.headers.get('X-Jumedia-Danmaku-Pending') === 'true' }
+}
 export const dmWebView = async (cid: number) => decodeWebView(await bytes('api', '/x/v2/dm/web/view', { type: 1, oid: cid })) // fetchDanmakuSettings
 export async function dmSaveConfig(s: DanmakuSettings) { // saveDanmakuSettings (23004 = unchanged)
   const root = await post('api', '/x/v2/dm/web/config', { ...csrf(), ...remoteParameters(s) }, { validates: false })

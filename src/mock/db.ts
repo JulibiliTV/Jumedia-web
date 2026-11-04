@@ -96,6 +96,7 @@ export interface DB {
   archives: Archive[]; collections: Collection[]; seasons: Season[]; regions: Region[]; dataSources: DataSource[]
   liveAreas: LiveArea[]; rooms: LiveRoom[]; liveMessages: LiveMessage[]
   replies: Reply[]; danmaku: Danmaku[]; seededDanmaku: number[]
+  dandanplay?: Record<number, { sync: import('../api/jumedia').DanmakuSync; comments: Danmaku[]; attemptedAt?: number }>
   commentReports?: { mid: number; rpid: number; reason: string; content?: string; status: 'pending' | 'dismissed' | 'removed'; ctime: number }[]
   userBlocks?: { mid: number; fid: number; ctime: number }[]
   relations: { mid: number; fid: number; mtime: number }[]; likes: { mid: number; aid: number }[]; dislikes: { mid: number; aid: number }[]; coins: { mid: number; aid: number; n: number }[]
@@ -340,7 +341,7 @@ function demoSeed(): DB {
   return fresh
 }
 
-const defaultSettings = (officialMid: number): DB['settings'] => ({ commentEnabled: true, commentReplyEnabled: true, commentMinInterval: 0, commentDuplicateWindow: 0, siteName: 'Jumedia', allowRegister: true, auditRequired: true, maxUploadMB: 2048, announcement: '欢迎来到 Jumedia 在线媒体平台。', allowGuestPlay: true, defaultQuality: 80, userDataSources: true, dataSourcePrivateNetwork: false, dataSourceSyncHours: 6, dataSourceSyncRate: 5, dataSourceSyncConcurrency: 2, officialMid, liveCacheDir: '', liveTranscodeHeight: 1080, imageCacheEnabled: true, imageCacheDir: '', imageCacheMaxMB: 1024 })
+const defaultSettings = (officialMid: number): DB['settings'] => ({ dandanplayEnabled: false, dandanplayApi: 'https://api.dandanplay.net', dandanplayAppId: '', commentEnabled: true, commentReplyEnabled: true, commentMinInterval: 0, commentDuplicateWindow: 0, siteName: 'Jumedia', allowRegister: true, auditRequired: true, maxUploadMB: 2048, announcement: '欢迎来到 Jumedia 在线媒体平台。', allowGuestPlay: true, defaultQuality: 80, userDataSources: true, dataSourcePrivateNetwork: false, dataSourceSyncHours: 6, dataSourceSyncRate: 5, dataSourceSyncConcurrency: 2, officialMid, liveCacheDir: '', liveTranscodeHeight: 1080, imageCacheEnabled: true, imageCacheDir: '', imageCacheMaxMB: 1024 })
 
 export function seed(): DB {
   setDemoPackage()

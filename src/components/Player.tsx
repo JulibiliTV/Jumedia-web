@@ -68,6 +68,10 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
 
   const danmaku = useRef<DanmakuCue[]>([])
   const loadedSegments = useRef(new Set<number>())
+  const segmentRequests = useRef(new Map<number, AbortController>())
+  const segmentTimers = useRef(new Map<number, number>())
+  const danmakuGeneration = useRef(0)
+  const ensureSegmentRef = useRef<(time: number) => void>(() => {})
   const actives = useRef<Active[]>([])
   const cursor = useRef(0)
   const lastT = useRef(0)
@@ -100,6 +104,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
 
   useEffect(() => {
     let alive = true
+    danmakuGeneration.current += 1
     setError(undefined); setUrl(undefined); setFormat(undefined); setTime(0); setDuration(0); setLoading(true)
     danmaku.current = []; setDmCount(0); loadedSegments.current.clear(); clearDanmaku()
     resolve(qn).then((u) => alive && setUrl(u)).catch((e) => alive && setError(e.message))
@@ -112,7 +117,14 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
         setSub(-1); setCues([])
       }).catch(() => {})
     }
-    return () => { alive = false }
+    return () => {
+      alive = false
+      danmakuGeneration.current += 1
+      segmentRequests.current.forEach((request) => request.abort())
+      segmentRequests.current.clear()
+      segmentTimers.current.forEach((timer) => window.clearTimeout(timer))
+      segmentTimers.current.clear()
+    }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onEndedRef = useRef(onEnded)
@@ -120,7 +132,16 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
   /** Player state follows whichever media object is active. */
   const listen = (m: Media) => {
     const on: Record<string, () => void> = {
-      play: () => { setPlaying(true); wake() },
+      play: () => {
+        setPlaying(true); wake()
+        const index = Math.floor(Math.max(0, m.currentTime) / 360) + 1
+        // Local comments do not indicate whether the external cache is ready.
+        // Recheck on resume; the server owns the provider retry interval.
+        if (!segmentRequests.current.has(index) && !segmentTimers.current.has(index)) {
+          loadedSegments.current.delete(index)
+        }
+        ensureSegmentRef.current(m.currentTime)
+      },
       pause: () => { setPlaying(false); setIdle(false); reportRef.current() },
       timeupdate: () => { setTime(m.currentTime); setBuffered(bufferedEnd(m)) },
       durationchange: () => setDuration(Number.isFinite(m.duration) ? m.duration : 0),
@@ -211,20 +232,52 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
     for (const a of actives.current) a.el.remove()
     actives.current = []
   }
-  const ensureSegment = useCallback((t: number) => {
-    if (source.kind === 'live') return
+  const ensureSegment = useCallback(function loadSegment(t: number) {
+    if (source.kind === 'live' || !settingsRef.current.enabled) return
     const index = Math.floor(Math.max(0, t) / 360) + 1
     if (loadedSegments.current.has(index)) return
     loadedSegments.current.add(index)
-    juli.dmSegment(source.cid, index).then((list) => {
-      const seen = new Set(danmaku.current.map((d) => d.id))
-      danmaku.current = [...danmaku.current, ...list.filter((d) => !seen.has(d.id))].sort((a, b) => a.time - b.time)
+    const generation = danmakuGeneration.current
+    const request = new AbortController()
+    segmentRequests.current.set(index, request)
+    const retry = (delay: number) => {
+      const timer = window.setTimeout(() => {
+        segmentTimers.current.delete(index)
+        loadedSegments.current.delete(index)
+        loadSegment(t)
+      }, delay)
+      segmentTimers.current.set(index, timer)
+    }
+    juli.dmSegmentResult(source.cid, index, request.signal).then(({ cues: list, pending }) => {
+      if (request.signal.aborted || generation !== danmakuGeneration.current) return
+      segmentRequests.current.delete(index)
+      const retained = danmaku.current.filter((d) => Math.floor(d.time / 360) + 1 !== index)
+      const seen = new Set<string>()
+      danmaku.current = [...retained, ...list].filter((d) => {
+        if (seen.has(d.id)) return false
+        seen.add(d.id)
+        return true
+      }).sort((a, b) => a.time - b.time)
       setDmCount(danmaku.current.length)
       cursor.current = lowerBound(danmaku.current, media()?.currentTime ?? 0)
-    }).catch(() => loadedSegments.current.delete(index))
+      if (pending) retry(2000)
+    }).catch(() => {
+      if (request.signal.aborted || generation !== danmakuGeneration.current) return
+      segmentRequests.current.delete(index)
+      retry(5000)
+    })
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { ensureSegment(0) }, [ensureSegment])
+  ensureSegmentRef.current = ensureSegment
+  useEffect(() => {
+    if (settings.enabled) ensureSegment(media()?.currentTime || (source.kind !== 'live' ? source.startAt ?? 0 : 0))
+    else {
+      segmentRequests.current.forEach((request, index) => { request.abort(); loadedSegments.current.delete(index) })
+      segmentRequests.current.clear()
+      segmentTimers.current.forEach((timer, index) => { window.clearTimeout(timer); loadedSegments.current.delete(index) })
+      segmentTimers.current.clear()
+    }
+  }, [ensureSegment, settings.enabled])
 
   const spawn = useCallback((cue: DanmakuCue, mine = false) => {
     const host = layer.current
@@ -268,7 +321,8 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
       const v = media(), host = layer.current
       if (!v || !host) return
       const t = v.currentTime
-      if (Math.abs(t - lastT.current) > 1.2) { clearDanmaku(); cursor.current = lowerBound(danmaku.current, t); ensureSegment(t) }
+      if (Math.abs(t - lastT.current) > 1.2) { clearDanmaku(); cursor.current = lowerBound(danmaku.current, t) }
+      ensureSegment(t)
       lastT.current = t
       const s = settingsRef.current
       if (!v.paused && s.enabled && !live) {
