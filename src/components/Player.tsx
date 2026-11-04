@@ -186,12 +186,19 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
   }, [url]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- danmaku settings (synced with /x/v2/dm/web/view & /config when signed in) ----------
+  const settingsRevision = useRef(0)
   useEffect(() => {
     if (!me || source.kind === 'live') return
-    juli.dmWebView(source.cid).then((s) => s && setSettings(s)).catch(() => {})
+    let alive = true
+    const revision = settingsRevision.current
+    juli.dmWebView(source.cid).then((s) => {
+      if (s && alive && revision === settingsRevision.current) setSettings(s)
+    }).catch(() => {})
+    return () => { alive = false }
   }, [me?.mid]) // eslint-disable-line react-hooks/exhaustive-deps
   const saveTimer = useRef(0)
   const updateSettings = (patch: Partial<DanmakuSettings>) => {
+    settingsRevision.current += 1
     const next = { ...settings, ...patch }
     setSettings(next)
     try { localStorage.setItem(LOCAL_DM, JSON.stringify(next)) } catch { /* ignore */ }
