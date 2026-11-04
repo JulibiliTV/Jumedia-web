@@ -1639,7 +1639,7 @@ const routes: Record<string, Handler> = {
         { key: 'JUMEDIA_STATIC_DIR', label: '静态资源目录', value: '../Jumedia-web/public' },
         { key: 'JUMEDIA_DATASOURCE_KEY', label: '数据源密钥', value: '未设置' },
       ],
-      startup: { publicOrigin: '', ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', videoEncoder: 'libx264' },
+      startup: { publicOrigin: '', ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', videoEncoder: 'auto' },
     }
   },
   '/x/admin/demo/import': async (c) => {
@@ -2031,7 +2031,7 @@ function serviceInput(c: Ctx): Record<string, string> | null {
   return out
 }
 
-export const VIDEO_ENCODERS = ['libx264', 'h264_videotoolbox', 'h264_nvenc', 'h264_qsv']
+export const VIDEO_ENCODERS = ['auto', 'libx264', 'h264_vaapi', 'h264_videotoolbox', 'h264_nvenc', 'h264_qsv']
 /** Validates and normalises runtime server settings in a settings save (in place on `c.p`). */
 function serverInput(c: Ctx) {
   const p = c.p

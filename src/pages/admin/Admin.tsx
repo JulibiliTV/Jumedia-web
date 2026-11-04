@@ -756,7 +756,7 @@ export function SiteSettings() {
 
 const SERVICE_FIELDS = [['serviceApi', '主站接口', '视频、番剧、用户等'], ['serviceLive', '直播接口', '直播间与弹幕'], ['serviceApp', '客户端接口', '电视端推荐'], ['servicePassport', '登录接口', '扫码登录与令牌']] as const
 
-const ENCODERS = [['libx264', 'libx264（软件编码）'], ['h264_videotoolbox', 'h264_videotoolbox（macOS 硬件编码）'], ['h264_nvenc', 'h264_nvenc（NVIDIA）'], ['h264_qsv', 'h264_qsv（Intel QSV）']]
+const ENCODERS = [['auto', '自动（优先 VAAPI 硬件编码）'], ['libx264', 'libx264（软件编码）'], ['h264_vaapi', 'h264_vaapi（Linux 硬件编码）'], ['h264_videotoolbox', 'h264_videotoolbox（macOS 硬件编码）'], ['h264_nvenc', 'h264_nvenc（NVIDIA）'], ['h264_qsv', 'h264_qsv（Intel QSV）']]
 
 /**
  * 服务器配置: runtime overrides of the start-up parameters (saved with the other settings and
@@ -781,9 +781,9 @@ function ServerSettings({ f, setF }: { f: Record<string, any>; setF: (f: Record<
         <div className="form-grid">
           {text('serverFfmpeg', 'ffmpeg 路径', 'JUMEDIA_FFMPEG', st?.ffmpeg)}
           {text('serverFfprobe', 'ffprobe 路径', 'JUMEDIA_FFPROBE', st?.ffprobe)}
-          <div className="field"><label>视频编码器 <span className="faint mono" style={{ fontWeight: 400 }}>JUMEDIA_FFMPEG_VIDEO_ENCODER</span></label>
-            <select className="select" value={f.serverVideoEncoder ?? ''} onChange={(e) => setF({ ...f, serverVideoEncoder: e.target.value })}>
-              <option value="">使用启动参数（{st?.videoEncoder || 'libx264'}）</option>
+          <div className="field"><label htmlFor="server-video-encoder">视频编码器 <span className="faint mono" style={{ fontWeight: 400 }}>JUMEDIA_FFMPEG_VIDEO_ENCODER</span></label>
+            <select id="server-video-encoder" className="select" value={f.serverVideoEncoder ?? ''} onChange={(e) => setF({ ...f, serverVideoEncoder: e.target.value })}>
+              <option value="">使用启动参数（{st?.videoEncoder || 'auto'}）</option>
               {ENCODERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
