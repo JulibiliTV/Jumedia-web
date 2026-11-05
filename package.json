@@ -2,7 +2,8 @@
   "name": "jumedia-web",
   "private": true,
   "version": "0.1.0",
-  "description": "Jumedia 在线媒体平台（前台 / 创作中心 / 管理后台），接口与 Juli 数据源一致",
+  "license": "Apache-2.0",
+  "description": "Jumedia 媒体平台网页端，聚合 Emby、Jellyfin、飞牛影视等媒体源和弹弹 Play 弹幕源，用于多人媒体分享与个人多媒体库聚合",
   "type": "module",
   "scripts": {
     "dev": "vite",
