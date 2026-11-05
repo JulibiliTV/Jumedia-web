@@ -88,6 +88,8 @@ docker compose pull web && docker compose up web
 
 页面按功能模块加载；进入播放页面或打开播放预览时才加载播放器。原生 MP4 播放不加载额外播放引擎，HLS 与 libmedia 按媒体格式加载。libmedia 的运行时与异步分块随网页构建产物一起发布，解码器 WebAssembly 文件仍由 `VITE_LIBMEDIA_WASM` 指定的地址按需提供。
 
+高码率、多音轨视频使用共享内存与多线程处理。Jumedia Server、Vite 开发和预览服务会为页面及 Worker 脚本设置 `Cross-Origin-Opener-Policy: same-origin` 和 `Cross-Origin-Embedder-Policy: credentialless`；单独托管网页时也需设置这两个响应头，并通过 HTTPS 或浏览器认可的本机安全上下文访问。浏览器不支持跨源隔离时仍可播放，但高负载媒体可能卡顿。`credentialless` 允许加载公开的跨域图片，但这些 `no-cors` 请求不携带凭据；直连媒体和自托管解码器的跨域读取仍须满足 CORS。
+
 ## 演示媒体
 
 演示内容只通过 `jumedia-demo` v1 JSON 数据包导入，不随应用初始化写入。使用自己的 Emby 生成数据包：

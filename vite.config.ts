@@ -6,6 +6,11 @@ import { libmediaAssets } from './build/libmediaAssets'
 const target = process.env.API_PROXY
 // Whole path segments only, so web pages such as /login and /live are not forwarded.
 const apiPaths = '^/(x|pgc|xlive|room|live_user|av|login|api|msg|live-relay|live-cache|bfs|upload|media|main|rankdb)/'
+// Match the hosted app so libmedia can use shared-memory worker pipelines.
+const playerHeaders = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'credentialless',
+}
 
 export default defineConfig({
   plugins: [react(), libmediaAssets()],
@@ -21,8 +26,10 @@ export default defineConfig({
   },
   // libmedia loads its own webpack chunks relative to the module URL; pre-bundling would move it away from them.
   optimizeDeps: { exclude: ['@libmedia/avplayer'] },
+  preview: { headers: playerHeaders },
   server: {
     port: 8790,
+    headers: playerHeaders,
     proxy: target ? {
       [apiPaths]: { target, changeOrigin: true, xfwd: true },
       // Live chat WebSocket (`getDanmuInfo` → /sub).
