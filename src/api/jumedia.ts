@@ -144,6 +144,7 @@ export const admin = {
   dashboard: () => data('api', '/x/admin/dashboard'),
   users: (p: { pn: number; keyword?: string; role?: string; status?: string }) => data('api', '/x/admin/users', { ps: 20, ...p }),
   userUpdate: (p: { mid: number; role?: string; status?: number; coins?: number }) => post('api', '/x/admin/user/update', { ...csrf(), ...p }),
+  userPassword: (mid: number, new_password: string) => post('api', '/x/admin/user/password', { ...csrf(), mid, new_password }),
   archives: (p: { pn: number; state?: string; keyword?: string; tid?: number }) => data('api', '/x/admin/archives', { ps: 20, ...p }),
   archiveDanmaku: (aid: number, cid: number, pn = 1) => data<ArchiveDanmaku>('api', '/x/admin/archive/danmaku', { aid, cid, pn, ps: 20 }),
   archiveAudit: (aid: number, state: number, reason = '') => post('api', '/x/admin/archive/audit', { ...csrf(), aid, state, reason }),

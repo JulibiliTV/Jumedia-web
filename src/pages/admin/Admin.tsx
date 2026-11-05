@@ -8,6 +8,7 @@ import * as juli from '../../api/juli'
 import { countText, dateTimeText, formatDuration } from '../../api/normalize'
 import { AreaChart } from '../../components/Chart'
 import { AuditMedia } from '../../components/AuditMedia'
+import { AdminUserPasswordDialog } from '../../components/AdminUserPasswordDialog'
 import { Icon } from '../../components/Icon'
 import { ConsoleFrame, ConsoleNav, Header } from '../../components/Layout'
 import { type DataSource, DataSourceCard, DataSourceEditor, useSyncPolling } from '../../components/DataSources'
@@ -156,7 +157,8 @@ export function Users() {
   const [q, setQ] = useState({ keyword: '', role: '', status: '' })
   const d = useAsync(() => admin.users({ pn, ...q }), [pn, q])
   const [edit, setEdit] = useState<any>(null)
-  const { me } = useSession()
+  const [passwordUser, setPasswordUser] = useState<{ mid: number; uname: string } | null>(null)
+  const { me, refresh } = useSession()
   const update = async (p: { mid: number; role?: string; status?: number; coins?: number }) => {
     try { const r = await admin.userUpdate(p); if (r.code) throw new Error(r.message); d.reload(); toast('已更新', 'success') } catch (e) { toastError(e) }
   }
@@ -178,12 +180,14 @@ export function Users() {
               <td><span className="row" style={{ gap: 6, color: u.status ? '#c43f3b' : 'var(--success)' }}><i style={{ width: 6, height: 6, borderRadius: 3, background: 'currentColor' }} />{u.status ? '已封禁' : '正常'}</span></td>
               <td><div className="actions">
                 <button className="btn sm" onClick={() => setEdit({ ...u })}>编辑</button>
+                <button className="btn sm" onClick={() => setPasswordUser({ mid: u.mid, uname: u.uname })}>修改密码</button>
                 {u.mid !== me?.mid && <button className={`btn sm ${u.status ? '' : 'danger'}`} onClick={async () => { if (u.status || (await confirmDialog(`封禁用户“${u.uname}”？其登录会话会立即失效。`, { danger: true, ok: '封禁' }))) update({ mid: u.mid, status: u.status ? 0 : 1 }) }}>{u.status ? '解封' : '封禁'}</button>}
               </div></td>
             </tr>
           ))}</tbody>
         </table></div><ListFoot pn={pn} size={20} total={d.data?.page.total ?? 0} onChange={setPn} /></section>
       )}
+      {passwordUser && <AdminUserPasswordDialog key={passwordUser.mid} user={passwordUser} onClose={() => setPasswordUser(null)} onSaved={() => { setPasswordUser(null); if (passwordUser.mid === me?.mid) void refresh() }} />}
       {edit && (
         <Modal title={`编辑用户 · ${edit.uname}`} onClose={() => setEdit(null)} footer={<><button className="btn" onClick={() => setEdit(null)}>取消</button><button className="btn primary" onClick={() => { update({ mid: edit.mid, role: edit.role, coins: edit.coins }); setEdit(null) }}>保存</button></>}>
           <div className="stack">

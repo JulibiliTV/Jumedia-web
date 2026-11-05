@@ -1429,6 +1429,19 @@ const routes: Record<string, Handler> = {
     const list = c.db.users.filter((u) => (!kw || searchMatch(u.uname + u.username + u.mid, kw)) && (!c.p.role || u.role === c.p.role) && (c.p.status === undefined || c.p.status === '' || u.status === int(c.p.status)))
     return { list: page(list, int(c.p.pn, 1), int(c.p.ps, 20)).map(adminUser), page: { pn: int(c.p.pn, 1), ps: int(c.p.ps, 20), total: list.length } }
   },
+  '/x/admin/user/password': (c) => {
+    const me = admin(c)
+    if (c.method !== 'POST') fail(-405, '请使用 POST 请求')
+    const u = userById(int(c.p.mid))
+    if (!u) return fail(-404, '用户不存在')
+    if ((c.p.new_password ?? '').length < 6) fail(-400, '新密码至少 6 位')
+    u.password = c.p.new_password
+    c.db.sessions = c.db.sessions.filter((s) => s.mid !== u.mid)
+    c.db.qrcodes = c.db.qrcodes.filter((q) => q.mid !== u.mid)
+    log(c, '修改用户密码', u.uname)
+    if (u.mid === me.mid) for (const name of ['SESSDATA', 'bili_jct', 'DedeUserID']) document.cookie = `${name}=; path=/; max-age=0`
+    return null
+  },
   '/x/admin/user/update': (c) => {
     const me = admin(c)
     const u = userById(int(c.p.mid))
