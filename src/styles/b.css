@@ -493,6 +493,15 @@
 .log-tag { height: 22px; padding: 0 8px; border-radius: 6px; background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; }
 
 /* 投稿页（设计稿） */
+.up-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px 20px; align-items: start; }
+.up-heading { grid-column: 1; grid-row: 1; min-width: 0; }
+.up-source-action { grid-column: 2; grid-row: 1; align-self: center; }
+.up-main { grid-column: 1; grid-row: 2; }
+.up-sidebar { grid-column: 2; grid-row: 2; }
+@media (max-width: 1100px) {
+  .up-layout { grid-template-columns: minmax(0, 1fr); }
+  .up-layout > .up-heading, .up-layout > .up-source-action, .up-layout > .up-main, .up-layout > .up-sidebar { grid-column: 1; grid-row: auto; }
+}
 .up-part { display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: 10px; background: var(--bg); }
 .up-part .pn { flex: none; width: 34px; font-size: 13px; font-weight: 700; color: var(--text-2); }
 .up-part .st { flex: none; width: 96px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

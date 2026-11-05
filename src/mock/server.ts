@@ -2,7 +2,7 @@ import { formatDuration } from '../api/normalize'
 import { Writer } from '../api/protobuf'
 import { idleSync, requestMockDanmaku } from './dandanplay'
 import { type Archive, type ArchiveField, type Banner, type CollectionField, type DataSource, type DB, type LiveRoom, type StreamSource, type User, av2bv, avatarURL, bv2av, getDB, importDemo, LIVE_CHATTER, nextID, putFile, resetDB, resolveMedia, save, seedDanmaku } from './db'
-import { dataSourceJSON, dsHlsPath, dsPlaylist, embyBase, forgetSession, mediaFormat, originJSON, parseDsRef, privateHost, probeSource, purgeSource, setSourceFetcher, SourceError, syncSource } from './datasource'
+import { browseSource, importSourceDrafts, dataSourceJSON, dsHlsPath, dsPlaylist, embyBase, forgetSession, mediaFormat, originJSON, parseDsRef, privateHost, probeSource, purgeSource, setSourceFetcher, SourceError, syncSource } from './datasource'
 import { parseDemoPackage } from './emby'
 import { cacheDir, cacheJSON, cacheKeyOf, cachePath, ensureCache, findCache, notReady, retryCache, roomCache, tickCaches, TRANSCODE_HEIGHTS } from './liveCache'
 import { liveWindow, parsePlaylist, passthrough, type Playlist, relayMaster } from './hlsRelay'
@@ -1165,6 +1165,20 @@ const routes: Record<string, Handler> = {
   '/x/web/datasource/save': async (c) => { csrf(c); userSources(c); return saveSource(c, ownSource(c, true), false) },
   '/x/web/datasource/sync': (c) => { csrf(c); userSources(c); return startSync(c, ownSource(c)!) },
   '/x/web/datasource/delete': (c) => { csrf(c); deleteSource(c, ownSource(c)!); return null },
+  '/x/web/datasource/items': async (c) => {
+    login(c); userSources(c)
+    const ds = ownSource(c)!
+    try { return await browseSource(c.db, ds, c.p.library, (c.p.keyword ?? '').trim(), Math.max(1, int(c.p.pn, 1)), Math.max(1, Math.min(100, int(c.p.ps, 20)))) }
+    catch (e) { return fail(-400, e instanceof Error ? e.message : '获取视频失败') }
+  },
+  '/x/web/datasource/import': async (c) => {
+    csrf(c); userSources(c)
+    const ds = ownSource(c)!
+    let ids: unknown
+    try { ids = JSON.parse(c.p.item_ids) } catch { return fail(-400, '每次请选择 1–20 个视频') }
+    try { const result = await importSourceDrafts(c.db, ds, c.p.library, ids, nextID); log(c, '数据源导入草稿', ds.name); return result }
+    catch (e) { return fail(-400, e instanceof Error ? e.message : '获取视频失败') }
+  },
   '/xlive/app-blink/v1/room/GetInfo': (c) => {
     const u = login(c)
     const r = ownRoom(c, u)
@@ -1805,7 +1819,7 @@ async function saveSource(c: Ctx, existing: DataSource | undefined, system: bool
   if (!existing) c.db.dataSources.push(ds)
   forgetSession(ds.id)
   log(c, existing ? '修改数据源' : '添加数据源', `${ds.name}${system ? '（系统）' : ''}`)
-  return startSync(c, ds)
+  return c.p.sync_now !== undefined && !truthy(c.p.sync_now) ? dataSourceJSON(c.db, ds) : startSync(c, ds)
 }
 
 /** Starts a sync in the background; callers poll the source list until `status` leaves `syncing`. */
@@ -1837,6 +1851,16 @@ function collectionOrigin(db: DB, x: DB['collections'][number]) {
 
 /** Edit of a data-source archive: only Jumedia metadata changes, media stays as synced; changed fields are locked. */
 function editOrigin(c: Ctx, u: User, a: Archive, title: string) {
+  const draft = truthy(c.p.draft), oldState = a.state
+  if (draft) {
+    if (oldState !== -20) fail(-400, '已投稿的稿件不能存为草稿')
+    title = title.slice(0, 80) || '未命名草稿'
+  } else if (!title || title.length > 80) fail(21001, '标题需为 1–80 个字符')
+  if (!c.db.regions.some(r => r.tid === int(c.p.tid) && !r.parent)) fail(21002, '请选择分区')
+  const sub = int(c.p.sub_tid)
+  if (sub && !c.db.regions.some(r => r.tid === sub && r.parent === int(c.p.tid))) fail(21002, '子分区不属于所选分区')
+  const dtime = !draft && oldState === 0 ? 0 : int(c.p.dtime)
+  if (!draft && dtime && (dtime < ts() + DTIME_MIN - 60 || dtime > ts() + DTIME_MAX)) fail(21004, '定时发布时间需在 2 小时后、15 天内')
   const o = a.origin!
   const next: Record<ArchiveField, string | number> = { title, desc: c.p.desc ?? '', tid: int(c.p.tid), tag: c.p.tag ?? '', pic: c.p.cover || a.pic }
   for (const f of ARCHIVE_FIELDS) {
@@ -1845,9 +1869,12 @@ function editOrigin(c: Ctx, u: User, a: Archive, title: string) {
     o.locked = next[f] === o.meta[f] ? o.locked.filter((x) => x !== f) : [...new Set([...o.locked, f])]
   }
   const ds = c.db.dataSources.find((x) => x.id === o.ds)
-  if (a.state !== -6) a.state = c.db.settings.auditRequired && u.role !== 'admin' && !ds?.system ? -1 : 0
+  if (draft) a.state = -20
+  else if (a.state !== -6) a.state = c.db.settings.auditRequired && u.role !== 'admin' && !ds?.system ? -1 : dtime ? -40 : 0
+  if (!draft) { if (dtime) a.pubdate = dtime; else if (oldState === -20) a.pubdate = ts() }
+  Object.assign(a, { sub_tid: sub, dtime: dtime || undefined, no_disturbance: truthy(c.p.no_disturbance), no_tv: truthy(c.p.no_tv) })
   a.reason = ''
-  log(c, '编辑稿件', title)
+  if (!draft) log(c, oldState === -20 ? '投稿' : '编辑稿件', title)
   return { aid: a.aid, bvid: a.bvid, state: a.state }
 }
 

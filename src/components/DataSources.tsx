@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { type DataSourceForm, dataSourceAPI } from '../api/jumedia'
 import { dateTimeText } from '../api/normalize'
+import { DataSourceImport } from './DataSourceImport'
 import { Icon } from './Icon'
 import { Avatar, confirmDialog, Empty, Modal, Spinner, Switch, toast, toastError } from './ui'
 
@@ -29,6 +30,7 @@ export function useSyncPolling(list: DataSource[] | undefined, reload: () => voi
 export function DataSourceCard({ ds, scope, onChanged, onEdit, showOwner }: { ds: DataSource; scope: 'web' | 'admin'; onChanged: () => void; onEdit?: () => void; showOwner?: boolean }) {
   const api = dataSourceAPI(scope)
   const [busy, setBusy] = useState(false)
+  const [importing, setImporting] = useState(false)
   const sync = async () => { setBusy(true); try { await api.sync(ds.id); onChanged() } catch (e) { toastError(e) } finally { setBusy(false) } }
   const remove = async () => {
     if (!(await confirmDialog(`删除数据源“${ds.name}”？从它导入的 ${ds.archives} 个视频与媒体库合集会一并从 Jumedia 移除（不会影响 Emby）。`, { danger: true, ok: '删除' }))) return
@@ -39,6 +41,7 @@ export function DataSourceCard({ ds, scope, onChanged, onEdit, showOwner }: { ds
   const tone = kind === 'success' ? ['var(--success-soft)', 'var(--success)'] : kind === 'danger' ? ['var(--danger-soft)', '#c43f3b'] : kind === 'brand' ? ['var(--brand-soft)', 'var(--brand)'] : ['var(--surface-2)', 'var(--text-2)']
   return (
     <section className="ds-card" style={ds.status === 'error' ? { borderColor: 'rgba(240,82,78,0.4)' } : undefined}>
+      {importing && <DataSourceImport initialID={ds.id} onClose={() => { setImporting(false); onChanged() }} />}
       <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
         <span className="ds-ic"><Icon name="box" size={20} /></span>
         <span className="stack grow" style={{ gap: 2, minWidth: 0 }}>
@@ -65,6 +68,7 @@ export function DataSourceCard({ ds, scope, onChanged, onEdit, showOwner }: { ds
       <div className="ds-foot">
         <span>{ds.archives} 个视频 · {ds.last_sync > 0 ? `上次同步 ${dateTimeText(ds.last_sync)}` : '尚未同步'}{ds.auto_sync ? ' · 自动同步' : ''}{enabled.length > 0 && ` · ${enabled.length} 个媒体库`}</span>
         <button type="button" className="btn" disabled={busy || ds.status === 'syncing'} onClick={sync}><Icon name="refresh" size={14} />立即同步</button>
+        {scope === 'web' && onEdit && <button type="button" className="btn primary" disabled={ds.status === 'syncing'} onClick={() => setImporting(true)}>获取视频</button>}
         {onEdit && <button type="button" className="btn" disabled={ds.status === 'syncing'} onClick={onEdit}>编辑</button>}
         <button type="button" className="btn" style={{ color: '#c43f3b', borderColor: 'rgba(240,82,78,0.4)' }} disabled={ds.status === 'syncing'} onClick={remove}>移除</button>
       </div>
@@ -100,7 +104,7 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
     e.preventDefault()
     if (!probe) return connect()
     setBusy(true)
-    try { await api.save({ ...form(), libraries: [...picked].join(',') }); toast('已保存，开始同步媒体库', 'success'); onSaved() } catch (err) { toastError(err) } finally { setBusy(false) }
+    try { await api.save({ ...form(), libraries: [...picked].join(','), sync_now: f.auto_sync }); toast(f.auto_sync ? '已保存，开始同步媒体库' : scope === 'web' ? '已保存，可手动获取视频' : '已保存，可手动同步媒体库', 'success'); onSaved() } catch (err) { toastError(err) } finally { setBusy(false) }
   }
   const body = (
     <form className="stack" style={{ gap: 16 }} onSubmit={save}>
@@ -135,11 +139,11 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
         <div className="muted" style={{ fontSize: 13 }}>{f.proxy_playback ? '视频流量经过 Jumedia 服务端。' : '播放器直接访问 Emby，视频流量不经过 Jumedia；播放链接会包含该 Emby 账号的访问令牌。'}</div>
         {import.meta.env.VITE_MOCK !== '0' && <div className="muted" style={{ fontSize: 13 }}>浏览器演示模式始终直连 Emby，代理播放需要使用 Jumedia 服务端。</div>}
       </div>
-      <label className="row" style={{ gap: 16 }}><span className="grow"><b style={{ fontSize: 14, fontWeight: 600 }}>自动同步</b><div className="muted" style={{ fontSize: 13 }}>定时同步新增和修改</div></span><Switch on={f.auto_sync} onChange={(auto_sync) => edit({ auto_sync })} /></label>
+      <label className="row" style={{ gap: 16 }}><span className="grow"><b style={{ fontSize: 14, fontWeight: 600 }}>自动同步</b><div className="muted" style={{ fontSize: 13 }}>{f.auto_sync ? '保存后同步整库，之后定时同步新增和修改' : scope === 'web' ? '只保存连接，之后手动获取视频或同步整库' : '只保存连接，之后手动同步整库'}</div></span><Switch on={f.auto_sync} onChange={(auto_sync) => edit({ auto_sync })} /></label>
       <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
         <button type="button" className="btn lg" onClick={onClose}>取消</button>
         {!probe ? <button type="button" className="btn primary lg" disabled={checking || !f.url.trim() || !f.username.trim()} onClick={connect}>{checking ? <Spinner size={14} /> : '连接'}</button>
-          : <><button type="button" className="btn lg" disabled={checking} onClick={connect}>重新连接</button><button className="btn primary lg" disabled={busy}>{busy ? <Spinner size={14} /> : value ? '保存并同步' : '接入并同步'}</button></>}
+          : <><button type="button" className="btn lg" disabled={checking} onClick={connect}>重新连接</button><button className="btn primary lg" disabled={busy}>{busy ? <Spinner size={14} /> : !f.auto_sync ? '保存数据源' : value ? '保存并同步' : '接入并同步'}</button></>}
       </div>
     </form>
   )
@@ -148,5 +152,5 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
 }
 
 export function DataSourceEmpty({ onAdd, disabled }: { onAdd: () => void; disabled?: boolean }) {
-  return <Empty icon="box" title="还没有数据源" hint="连接你的 Emby 服务器，媒体库中的电影与剧集会自动成为你的视频与合集" action={!disabled && <button className="btn primary" onClick={onAdd}><Icon name="plus" size={15} />添加 Emby 数据源</button>} />
+  return <Empty icon="box" title="还没有数据源" hint="连接你的 Emby 服务器，手动选片投稿或自动同步媒体库" action={!disabled && <button className="btn primary" onClick={onAdd}><Icon name="plus" size={15} />添加 Emby 数据源</button>} />
 }

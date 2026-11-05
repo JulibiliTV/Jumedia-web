@@ -117,7 +117,11 @@ export const medalTakeOff = () => post('live', '/xlive/web-room/v1/fansMedal/tak
 export const medalJoin = (roomid: number) => post('live', '/xlive/web-room/v1/fansMedal/join', { ...csrf(), roomid })
 
 // ---------- 数据源（Emby，只读） ----------
-export type DataSourceForm = { id?: number; name: string; url: string; username: string; password: string; clear_password?: boolean; libraries?: string; auto_sync: boolean; proxy_playback: boolean }
+export type DataSourceForm = { id?: number; name: string; url: string; username: string; password: string; clear_password?: boolean; libraries?: string; auto_sync: boolean; proxy_playback: boolean; sync_now?: boolean }
+export interface SourceVideo { id: string; title: string; type: string; pic: string; importable: boolean; archive: { aid: number; state: number } | null }
+export interface SourceDraft { aid: number; bvid: string; state: number; created: boolean }
+export const dataSourceItems = (p: { id: number; library: string; keyword?: string; pn: number; ps: number }): Promise<{ list: SourceVideo[]; page: { pn: number; ps: number; total: number } }> => data('api', '/x/web/datasource/items', p)
+export const dataSourceImport = (id: number, library: string, items: string[]): Promise<{ archives: SourceDraft[] }> => data('api', '/x/web/datasource/import', { ...csrf(), id, library, item_ids: JSON.stringify(items) }, { method: 'POST' })
 /** Same routes under `/x/web/` (the caller's own sources) and `/x/admin/` (system sources, owned by the official account). */
 export function dataSourceAPI(scope: 'web' | 'admin') {
   const base = `/x/${scope}/datasource`

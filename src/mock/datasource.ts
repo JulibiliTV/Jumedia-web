@@ -201,9 +201,12 @@ function image(s: Session, item: Item, ...kinds: ('Backdrop' | 'Thumb' | 'Primar
 /** Emby items fetched per page; each page is written before the next one is requested. */
 export const SYNC_PAGE = 100
 
-function listPage(s: Session, get: Get, library: string, start: number, limit: number) {
+function listPage(s: Session, get: Get, library: string, start: number, limit: number, keyword = '', ids: string[] = []) {
   const fields = 'Overview,Genres,PremiereDate,DateCreated,MediaSources,RunTimeTicks'
-  return get<{ Items: Item[]; TotalRecordCount: number }>(`/Users/${s.user}/Items?ParentId=${library}&Recursive=true&IncludeItemTypes=Movie,Series,Video,MusicVideo&SortBy=SortName&SortOrder=Ascending&Fields=${fields}&StartIndex=${start}&Limit=${limit}&api_key=${s.token}`)
+  const query = new URLSearchParams({ ParentId: library, Recursive: 'true', IncludeItemTypes: 'Movie,Series,Video,MusicVideo', SortBy: 'SortName', SortOrder: 'Ascending', Fields: fields, StartIndex: String(start), Limit: String(limit), api_key: s.token })
+  if (keyword) query.set('SearchTerm', keyword)
+  if (ids.length) query.set('Ids', ids.join(','))
+  return get<{ Items: Item[]; TotalRecordCount: number }>(`/Users/${s.user}/Items?${query}`)
 }
 
 async function episodes(s: Session, get: Get, series: string): Promise<Item[]> {
@@ -240,6 +243,71 @@ async function mirror(ds: DataSource, s: Session, get: Get, regions: Region[], l
 
 /** Page media keyed by Emby item id, so re-synced episodes keep their cid (and danmaku/history). */
 const itemOf = (media: string) => parseDsRef(media)?.item ?? media
+
+function importLibrary(db: DB, ds: DataSource, library: string) {
+  if (!ds.system && !db.settings.dataSourcePrivateNetwork && privateHost(ds.url)) throw new SourceError('站点不允许使用内网地址的 Emby 服务器')
+  const lib = ds.libraries.find(l => l.id === library && l.enabled)
+  if (!lib) throw new SourceError('请选择已接入的媒体库')
+  return lib
+}
+const importable = (item: Item) => item.LocationType !== 'Virtual' && (item.Type === 'Series' || ['Movie', 'Video', 'MusicVideo'].includes(item.Type) && !!item.MediaSources?.length)
+
+// Catalog imports keep names locally; requests to Emby need the discovered ID.
+async function importLibraryID(s: Session, get: Get, lib: DataSourceLibrary) {
+  if (lib.type || lib.id !== lib.name) return lib.id
+  const found = await libraries(s, get)
+  const exact = found.find(l => l.id === lib.id)
+  if (exact) return exact.id
+  const matches = found.filter(l => l.name === lib.name)
+  if (matches.length !== 1) throw new SourceError('媒体库名称无法唯一匹配，请重新连接并保存数据源')
+  return matches[0].id
+}
+
+export async function browseSource(db: DB, ds: DataSource, library: string, keyword: string, pn: number, ps: number) {
+  const lib = importLibrary(db, ds, library)
+  const s = await sessionFor(ds)
+  const get = syncGet(s, new Throttle(Number(db.settings.dataSourceSyncRate) || 5, Number(db.settings.dataSourceSyncConcurrency) || 2))
+  const page = await listPage(s, get, await importLibraryID(s, get, lib), (pn - 1) * ps, ps, keyword)
+  return { list: (page.Items ?? []).map(item => {
+    const a = db.archives.find(a => a.origin?.ds === ds.id && a.origin.item === item.Id)
+    return { id: item.Id, title: item.Name, type: item.Type, pic: image(s, item, 'Backdrop', 'Thumb', 'Primary'), importable: importable(item), archive: a ? { aid: a.aid, state: a.state } : null }
+  }), page: { pn, ps, total: page.TotalRecordCount ?? 0 } }
+}
+
+export async function importSourceDrafts(db: DB, ds: DataSource, library: string, input: unknown, nextID: () => number) {
+  const lib = importLibrary(db, ds, library)
+  if (ds.status === 'syncing') throw new SourceError('正在同步中，请稍后')
+  if (!Array.isArray(input) || input.length < 1 || input.length > 20 || input.some(id => typeof id !== 'string' || !id.trim() || /[,:]/.test(id))) throw new SourceError('每次请选择 1–20 个视频')
+  const ids = [...new Set(input as string[])]
+  const s = await sessionFor(ds)
+  const get = syncGet(s, new Throttle(Number(db.settings.dataSourceSyncRate) || 5, Number(db.settings.dataSourceSyncConcurrency) || 2))
+  const page = await listPage(s, get, await importLibraryID(s, get, lib), 0, ids.length, '', ids)
+  const mirrors: { id: string; value: Mirrored }[] = []
+  for (const id of ids) {
+    const item = page.Items?.find(item => item.Id === id)
+    if (!item || !importable(item)) throw new SourceError('所选视频不存在或没有可用媒体，请刷新列表')
+    const value = await mirror(ds, s, get, db.regions, lib, item)
+    if (!value) throw new SourceError(`「${item.Name}」没有可用的视频`)
+    mirrors.push({ id, value })
+  }
+  if (!db.dataSources.includes(ds)) throw new SourceError('数据源不存在')
+  if ((ds as DataSource).status === 'syncing') throw new SourceError('正在同步中，请稍后')
+  if (ids.some(id => db.archives.some(a => a.origin?.ds === ds.id && a.origin.item === id && a.state === -100))) throw new SourceError('所选视频已在 Jumedia 删除，不能重复导入')
+  const archives = mirrors.map(({ id, value: m }) => {
+    let a = db.archives.find(a => a.origin?.ds === ds.id && a.origin.item === id)
+    const created = !a
+    if (!a) {
+      const aid = Math.max(100000, ...db.archives.map(a => a.aid)) + 1
+      a = { aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: Math.floor(Date.now() / 1000), pubdate: 0, state: -20, reason: '', copyright: 2, source: `Emby · ${ds.server_name || ds.name}`,
+        pages: m.pages.map(p => ({ cid: nextID(), ...p })), chapters: [], subtitles: [], stat: { view: 0, danmaku: 0, reply: 0, favorite: 0, coin: 0, share: 0, like: 0 },
+        origin: { type: 'emby', ds: ds.id, item: id, library: lib.id, locked: [], meta: m.meta } }
+      db.archives.push(a)
+      queueMockDanmaku(db, a)
+    }
+    return { aid: a.aid, bvid: a.bvid, state: a.state, created }
+  })
+  return { archives }
+}
 
 /**
  * Mirrors the source into `db`, one page of `SYNC_PAGE` items at a time: each
@@ -289,6 +357,7 @@ export async function syncSource(db: DB, ds: DataSource, nextID: () => number): 
           return
         }
         if (!m || a?.state === -100 || (a && seen.has(a.aid))) return
+        if (a?.state === -20) { seen.add(a.aid); aids.push(a.aid); return }
         if (a) {
           const o = a.origin!
           for (const f of Object.keys(m.meta) as ArchiveField[]) if (!o.locked.includes(f)) (a as unknown as Record<string, unknown>)[f] = m.meta[f]
@@ -318,7 +387,7 @@ export async function syncSource(db: DB, ds: DataSource, nextID: () => number): 
     }
     if (!incomplete.has(lib.id)) upsertCollection(db, ds, s, lib, aids, nextID, true)
   }
-  for (const a of db.archives) if (a.origin?.ds === ds.id && !seen.has(a.aid) && a.state !== -100 && !incomplete.has(a.origin.library)) a.state = -6
+  for (const a of db.archives) if (a.origin?.ds === ds.id && !seen.has(a.aid) && a.state !== -100 && a.state !== -20 && !incomplete.has(a.origin.library)) a.state = -6
   const live = new Set(ds.libraries.filter((l) => l.enabled).map((l) => l.id))
   db.collections = db.collections.filter((c) => c.origin?.ds !== ds.id || live.has(c.origin.library))
   for (const l of ds.libraries) if (!l.enabled) l.collection_id = 0

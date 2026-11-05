@@ -5,6 +5,7 @@ import * as jm from '../../api/jumedia'
 import { countText, dateTimeText, formatDuration, timeText } from '../../api/normalize'
 import { AreaChart } from '../../components/Chart'
 import { type DataSource, DataSourceCard, DataSourceEditor, useSyncPolling } from '../../components/DataSources'
+import { DataSourceImport } from '../../components/DataSourceImport'
 import { CacheStatus, cacheBusy, StreamSourceEditor } from '../../components/StreamSource'
 import { Icon } from '../../components/Icon'
 import { ConsoleFrame, ConsoleNav } from '../../components/Layout'
@@ -143,6 +144,12 @@ function probeDuration(file: File): Promise<{ duration: number; poster?: Blob }>
 /** 投稿 / 编辑 — upload files, then `/x/vu/web/add/v3` or `/x/vu/web/edit`. */
 export function Upload() {
   const { aid } = useParams()
+  const { me } = useSession()
+  return <UploadForm key={`${me?.mid ?? ''}/${aid ?? 'new'}`} />
+}
+
+function UploadForm() {
+  const { aid } = useParams()
   const editing = !!aid
   useTitle(editing ? '编辑稿件' : '投稿')
   const nav = useNavigate()
@@ -154,6 +161,7 @@ export function Upload() {
   // 定时发布: off by default; turning it on proposes three hours from now on the half hour.
   const [schedule, setSchedule] = useState<{ on: boolean; day: string; clock: string }>(() => ({ on: false, ...splitTime(Math.ceil((Date.now() / 1000 + 3 * 3600) / 1800) * 1800) }))
   const [archState, setArchState] = useState<number | null>(null)
+  const [importing, setImporting] = useState(false)
   const { me } = useSession()
   const tags = form.tag.split(/[,，]/).map((t) => t.trim()).filter(Boolean)
   const setTags = (list: string[]) => setForm((f) => ({ ...f, tag: list.join(',') }))
@@ -169,7 +177,9 @@ export function Upload() {
   const coverInput = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (!aid) return
+    let live = true
     jm.creatorArchive(Number(aid)).then((d) => {
+      if (!live) return
       const a = d.Archive
       setForm({ title: a.title, tid: a.tid, sub_tid: a.sub_tid ?? 0, tag: a.tag, desc: a.desc, cover: a.cover, copyright: a.copyright, source: a.source ?? '', season_id: d.season_id, no_disturbance: a.no_disturbance ?? 0, no_tv: a.no_tv ?? 0 })
       setArchState(a.state)
@@ -177,8 +187,9 @@ export function Upload() {
       setParts(d.Videos.map((v: any) => ({ key: String(v.cid), name: v.title, filename: v.filename, title: v.title, duration: v.duration, progress: 1 })))
       setChapters(d.chapters ?? [])
       setOrigin(d.origin ?? null)
-    }).catch(toastError)
-  }, [aid])
+    }).catch(e => { if (live) toastError(e) })
+    return () => { live = false }
+  }, [aid, me?.mid])
   const resetOrigin = async () => {
     if (!origin || !(await confirmDialog(`将${origin.locked.map((f) => FIELD_LABEL[f]).join('、')}恢复为 Emby 中的信息？`, { ok: '恢复' }))) return
     try {
@@ -219,7 +230,7 @@ export function Upload() {
   const dtime = schedule.on ? Math.floor(new Date(`${schedule.day}T${schedule.clock}`).getTime() / 1000) : 0
   // A published archive keeps its publish time, so scheduling only applies before that.
   const canSchedule = archState === null || archState !== 0
-  const canDraft = !origin && (archState === null || archState === -20)
+  const canDraft = archState === null || archState === -20
   const submit = async (e: FormEvent | null, draft = false) => {
     e?.preventDefault()
     if (parts.some((p) => !p.filename && !p.error)) return toast('请等待视频上传完成', 'error')
@@ -244,17 +255,20 @@ export function Upload() {
   const regionLabel = (tid: number) => (regions.data ?? []).find((r: any) => r.tid === tid)?.name ?? ''
   const suggest = [regionLabel(form.tid), ...subs.map((x) => x.name)].filter((t) => t && !tags.includes(t)).slice(0, 3)
   return (
-    <form onSubmit={submit} className="row wrap" style={{ gap: 20, alignItems: 'flex-start' }}>
-      <div className="stack" style={{ flex: '999 1 520px', minWidth: 0, gap: 16 }}>
-        <div className="stack" style={{ gap: 4 }}>
+    <>
+    {importing && <DataSourceImport onClose={() => setImporting(false)} />}
+    <form onSubmit={submit} className="up-layout">
+        <div className="up-heading stack" style={{ gap: 4 }}>
           <h1 style={{ fontSize: 26, fontWeight: 800 }}>{editing ? '编辑稿件' : '填写稿件信息'}</h1>
-          <span className="muted" style={{ fontSize: 14 }}>{editing ? (origin ? '这里的修改只保存在 Jumedia，不会写回 Emby；修改过的项目在之后的同步中保持不变' : '修改后将重新进入审核') : '支持 MP4 / MOV / MKV / WebM，可一次上传多个分 P'}</span>
+          {(!editing || !origin) && <span className="muted" style={{ fontSize: 14 }}>{editing ? '修改后将重新进入审核' : '支持 MP4 / MOV / MKV / WebM，可一次上传多个分 P'}</span>}
         </div>
+        {!editing && !parts.length && <button type="button" className="up-source-action btn" onClick={() => setImporting(true)}><Icon name="box" size={16} />从数据源获取视频</button>}
 
+      <div className="up-main stack" style={{ minWidth: 0, gap: 16 }}>
         <section className="sec" style={{ gap: 12 }}>
           <div className="row between">
             <h2>视频文件（{parts.length} P）</h2>
-            {origin ? <span className="log-tag"><Icon name="lock" size={12} />来自 Emby · {origin.datasource_name}{origin.library && ` · ${origin.library}`}</span>
+            {origin ? <span className="log-tag">数据源：<strong>{origin.datasource_name}{origin.library && ` > ${origin.library}`}</strong></span>
               : <button type="button" className="sm-btn" onClick={() => fileInput.current?.click()}><Icon name="plus" size={14} />添加分 P</button>}
           </div>
           {origin?.missing && <div className="ds-err">该视频已不在 Emby 媒体库中（或所在媒体库已停用），当前不会对外显示。</div>}
@@ -345,7 +359,7 @@ export function Upload() {
         </section>}
       </div>
 
-      <aside className="stack" style={{ flex: '1 1 280px', maxWidth: 340, minWidth: 0, gap: 16, paddingTop: 70 }}>
+      <aside className="up-sidebar stack" style={{ minWidth: 0, gap: 16 }}>
         <section className="sec" style={{ padding: 16, gap: 10 }}>
           <span className="muted" style={{ fontSize: 13, fontWeight: 600 }}>首页预览</span>
           <div className="up-prev">{form.cover && <img src={form.cover} alt="" />}<div className="shade"><span>0</span><span>0 弹幕</span><span style={{ marginLeft: 'auto' }}>{formatDuration(total)}</span></div></div>
@@ -370,6 +384,7 @@ export function Upload() {
         <span className="faint" style={{ fontSize: 12, lineHeight: 1.6, textAlign: 'center' }}>{editing && origin ? '修改只保存在 Jumedia' : '投稿后进入审核，通过后对所有人可见'}</span>
       </aside>
     </form>
+    </>
   )
 }
 
@@ -621,7 +636,7 @@ export function DataSources() {
     <div className="row wrap" style={{ gap: 20, alignItems: 'flex-start' }}>
       <div className="stack" style={{ flex: '999 1 480px', minWidth: 0, gap: 16 }}>
         <div className="chead">
-          <div><h1>数据源</h1><p>以只读方式接入 Emby：媒体库中的电影、剧集成为你名下的视频，每个媒体库显示为一个合集，分区按元信息自动设置</p></div>
+          <div><h1>数据源</h1><p>以只读方式接入 Emby，手动选择电影、剧集导入草稿，也可自动同步整个媒体库</p></div>
         </div>
         {!d.data.enabled && <div className="ds-card muted">站点暂未开放个人数据源，已添加的数据源仍会显示，但无法新增或同步。</div>}
         {list?.map((ds) => edit !== 'new' && edit?.id === ds.id
@@ -634,9 +649,9 @@ export function DataSources() {
       <aside style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 0, paddingTop: 70 }}>
         <section className="ds-card muted" style={{ gap: 12, padding: 16, fontSize: 13, lineHeight: 1.7 }}>
           <b style={{ fontSize: 15, color: 'var(--text)' }}>接入后会怎样</b>
-          <span>· 每个媒体库变成一个合集，视频归在你名下</span>
+          <span>· 手动获取创建草稿，整库同步会创建合集</span>
           <span>· 片名、简介、海报取自 Emby 元信息</span>
-          <span>· 新视频按站点规则进入审核</span>
+          <span>· 草稿由你投稿，整库同步按站点规则审核</span>
           <span>· 在 Jumedia 修改的标题不会写回 Emby</span>
           <span>· 只接入登录用户能看到的媒体库</span>
           <span>· 移除数据源会同时下架它的全部视频</span>
