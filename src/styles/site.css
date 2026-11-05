@@ -254,8 +254,9 @@
 .scrub:hover .knob { opacity: 1; }
 .scrub .chapter-gap { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(0, 0, 0, 0.7); }
 .scrub .tip { position: absolute; bottom: 20px; translate: -50% 0; padding: 3px 8px; border-radius: 5px; background: rgba(0, 0, 0, 0.8); font-size: 12px; white-space: nowrap; pointer-events: none; }
-.ctrl-row { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
-.ctrl-row .time { font-size: 13px; font-variant-numeric: tabular-nums; margin: 0 8px; opacity: 0.92; }
+.ctrl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+.ctrl-row .time { font-size: 13px; font-variant-numeric: tabular-nums; margin: 0 8px; opacity: 0.92; white-space: nowrap; }
+.player-resolution { padding: 0 8px; font-size: 13px; white-space: nowrap; opacity: 0.9; }
 .cbtn { position: relative; height: 34px; min-width: 34px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 13px; opacity: 0.9; }
 .cbtn:hover { opacity: 1; background: rgba(255, 255, 255, 0.12); }
 .cbtn.on { color: #7ab8ff; }

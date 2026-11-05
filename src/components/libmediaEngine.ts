@@ -13,6 +13,8 @@ export interface MediaLike extends EventTarget {
   readonly duration: number
   readonly paused: boolean
   readonly ended: boolean
+  readonly videoWidth: number
+  readonly videoHeight: number
   volume: number
   muted: boolean
   playbackRate: number
@@ -66,6 +68,7 @@ export class LibmediaEngine extends EventTarget implements MediaLike {
     p.on(AV.Events.TIME, (t: bigint) => { if (this.seeking === null) { this.setTime(Number(t) / 1000); this.emit('timeupdate') } })
     p.on(AV.Events.ENDED, () => { this.state = 'ended'; this.emit('pause'); this.emit('ended') })
     p.on(AV.Events.ERROR, () => this.emit('error'))
+    p.on(AV.Events.FIRST_VIDEO_RENDERED, () => this.emit('resize'))
     await p.load(this.url, { ext: this.ext })
     if (this.destroyed) return
     this.total = Number(p.getDuration()) / 1000
@@ -102,6 +105,8 @@ export class LibmediaEngine extends EventTarget implements MediaLike {
     })
   }
   get duration() { return this.total }
+  get videoWidth() { return this.player?.getStats().width ?? 0 }
+  get videoHeight() { return this.player?.getStats().height ?? 0 }
   get paused() { return this.state !== 'playing' }
   get ended() { return this.state === 'ended' }
   get bufferedEnd() { return this.time }

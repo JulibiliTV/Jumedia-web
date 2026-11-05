@@ -22,6 +22,21 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2]
 const COLORS = [0xffffff, 0xfe0302, 0xffd302, 0x00cd00, 0x00a0ea, 0xcc0273]
 const LOCAL_DM = 'jumedia.dm.settings'
 
+function resolutionLabel(width: number, height: number): string {
+  if (width <= 0 || height <= 0) return ''
+  const long = Math.max(width, height), short = Math.min(width, height)
+  // The long edge preserves the tier of cropped widescreen films; normalize
+  // orientation so portrait video receives the same label as landscape video.
+  for (const [w, h, label] of [
+    [7680, 4320, '8K'], [3840, 2160, '4K'], [2560, 1440, '1440p'],
+    [1920, 1080, '1080p'], [1280, 720, '720p'], [1024, 576, '576p'],
+    [854, 480, '480p'], [640, 360, '360p'], [426, 240, '240p'],
+  ] as const) {
+    if (long >= w || short >= h) return label
+  }
+  return `${short}p`
+}
+
 function loadLocalSettings(): DanmakuSettings {
   try { return { ...defaultDanmakuSettings, ...JSON.parse(localStorage.getItem(LOCAL_DM) ?? '{}') } } catch { return defaultDanmakuSettings }
 }
@@ -43,6 +58,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
   const [loading, setLoading] = useState(true)
   const [qualities, setQualities] = useState<Quality[]>([])
   const [qn, setQn] = useState(80)
+  const [resolution, setResolution] = useState('')
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -94,7 +110,8 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
     const d = source.kind === 'bangumi' ? await juli.pgcPlayurl(source.epid, quality) : await juli.playurl(source.aid, source.cid, quality)
     const op = (d.clip_info_list ?? []).find((x: { clipType?: string }) => x.clipType === 'CLIP_TYPE_OP')
     setOpening(op && op.end > op.start ? { start: op.start, end: op.end } : null)
-    setQualities((d.accept_quality ?? []).map((q: number, i: number) => ({ qn: q, label: d.accept_description?.[i] ?? String(q) })))
+    // Local playback returns the same original file for every protocol quality ID.
+    setQualities(d.from === 'local' ? [] : (d.accept_quality ?? []).map((q: number, i: number) => ({ qn: q, label: d.accept_description?.[i] ?? String(q) })))
     setQn(d.quality ?? quality)
     const first = d.durl?.[0]?.url
     if (!first) throw new Error('没有可播放的线路')
@@ -105,7 +122,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
   useEffect(() => {
     let alive = true
     danmakuGeneration.current += 1
-    setError(undefined); setUrl(undefined); setFormat(undefined); setTime(0); setDuration(0); setLoading(true)
+    setError(undefined); setUrl(undefined); setFormat(undefined); setTime(0); setDuration(0); setResolution(''); setLoading(true)
     danmaku.current = []; setDmCount(0); loadedSegments.current.clear(); clearDanmaku()
     resolve(qn).then((u) => alive && setUrl(u)).catch((e) => alive && setError(e.message))
     if (source.kind !== 'live') {
@@ -131,6 +148,10 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
   onEndedRef.current = onEnded
   /** Player state follows whichever media object is active. */
   const listen = (m: Media) => {
+    const updateResolution = () => {
+      const width = m.videoWidth, height = m.videoHeight
+      setResolution(resolutionLabel(width, height))
+    }
     const on: Record<string, () => void> = {
       play: () => {
         setPlaying(true); wake()
@@ -143,7 +164,9 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
         ensureSegmentRef.current(m.currentTime)
       },
       pause: () => { setPlaying(false); setIdle(false); reportRef.current() },
-      timeupdate: () => { setTime(m.currentTime); setBuffered(bufferedEnd(m)) },
+      timeupdate: () => { setTime(m.currentTime); setBuffered(bufferedEnd(m)); updateResolution() },
+      loadedmetadata: updateResolution,
+      resize: updateResolution,
       durationchange: () => setDuration(Number.isFinite(m.duration) ? m.duration : 0),
       waiting: () => setLoading(true),
       canplay: () => setLoading(false),
@@ -156,6 +179,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
   }
 
   useEffect(() => {
+    setResolution('')
     const v = video.current
     if (!v || !url) return
     const start = source.kind !== 'live' ? source.startAt : undefined
@@ -476,12 +500,12 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
             <div className="grow" />
             {opening && !live && time < opening.end - 1 && <button className="cbtn chip" onClick={() => { seek(opening.end); flash('已跳过片头') }}>跳过片头</button>}
             <button className={`cbtn ${settings.enabled ? 'on' : ''}`} onClick={() => updateSettings({ enabled: !settings.enabled })} title="弹幕开关 (D)"><Icon name="danmaku" size={19} /></button>
-            {qualities.length > 0 && (
+            {qualities.length > 1 ? (
               <div style={{ position: 'relative' }}>
-                <button className="cbtn" onClick={() => setPop(pop === 'quality' ? '' : 'quality')}>{qualities.find((q) => q.qn === qn)?.label.split(' ')[0] ?? '画质'}</button>
-                {pop === 'quality' && <div className="cpop">{qualities.map((q) => <button key={q.qn} className={q.qn === qn ? 'on' : ''} onClick={async () => { setPop(''); pendingSeek.current = media()?.currentTime ?? 0; try { const u = await resolve(q.qn); setUrl(undefined); setLoading(true); setTimeout(() => setUrl(u)); flash(`已切换至 ${q.label}`) } catch (e) { toastError(e) } }}>{q.label}</button>)}</div>}
+                <button className="cbtn" title="视频分辨率" onClick={() => setPop(pop === 'quality' ? '' : 'quality')}>{resolution || '画质'}</button>
+                {pop === 'quality' && <div className="cpop">{qualities.map((q) => <button key={q.qn} className={q.qn === qn ? 'on' : ''} onClick={async () => { setPop(''); pendingSeek.current = media()?.currentTime ?? 0; try { const u = await resolve(q.qn); setUrl(undefined); setLoading(true); setTimeout(() => setUrl(u)); flash(`已切换至 ${q.label}`) } catch (e) { toastError(e) } }}>{q.qn === qn && resolution ? resolution : q.label}</button>)}</div>}
               </div>
-            )}
+            ) : resolution && <span className="player-resolution" title="视频分辨率">{resolution}</span>}
             {!live && (
               <div style={{ position: 'relative' }}>
                 <button className="cbtn" onClick={() => setPop(pop === 'speed' ? '' : 'speed')}>{rate === 1 ? '倍速' : `${rate}x`}</button>
