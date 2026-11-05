@@ -11,7 +11,9 @@ COPY build build
 COPY public public
 COPY src src
 COPY scripts/check-bundle.mjs scripts/check-bundle.mjs
-RUN VITE_MOCK=0 npm run build && npm run check:bundle -- --production
+ARG BUILD_VERSION
+ARG BUILD_REVISION=dev
+RUN BUILD_VERSION="$BUILD_VERSION" BUILD_REVISION="$BUILD_REVISION" VITE_MOCK=0 npm run build && npm run check:bundle -- --production
 
 FROM busybox:1.37
 COPY --from=build /src/dist /dist

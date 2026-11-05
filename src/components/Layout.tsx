@@ -255,7 +255,7 @@ function HomeExtras() {
 }
 
 export function Sidebar({ home = false }: { home?: boolean }) {
-  const { me } = useSession()
+  const { me, site } = useSession()
   return (
     <aside className="sidebar" aria-label="侧栏">
       {NAV.map((n) => <NavLink key={n.to} to={n.to} end={n.end} className={navClass}><Icon name={n.icon} size={18} />{n.label}</NavLink>)}
@@ -273,6 +273,10 @@ export function Sidebar({ home = false }: { home?: boolean }) {
       <div className="foot">
         <Link to="/creator">创作中心</Link><Link to="/creator/live">开播</Link><Link to="/account/settings">账号设置</Link>{!me && <Link to="/register">注册账号</Link>}
         <span>© Jumedia</span>
+        <div className="site-versions" aria-label="版本信息">
+          <span title={`Web v${__FRONTEND_VERSION__}`}>Web v{__FRONTEND_VERSION__.split('+')[0]}</span>
+          <span title={site?.version && `后端 ${site.version}`}>后端 {site?.version === 'mock' ? 'Mock' : site?.version ? `v${site.version.split('+')[0]}` : '未知'}</span>
+        </div>
       </div>
     </aside>
   )

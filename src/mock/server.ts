@@ -1749,7 +1749,7 @@ const routes: Record<string, Handler> = {
     const base = (k: string) => String(c.db.settings[k] ?? '') || c.origin
     return { api: base('serviceApi'), live: base('serviceLive'), app: base('serviceApp'), passport: base('servicePassport'), cdn: JSON.parse(String(c.db.settings.serviceCdns || '[]')), mtime: Number(c.db.settings.serviceMtime ?? 0) }
   },
-  '/x/jumedia/site': (c) => ({ siteName: c.db.settings.siteName, allowRegister: c.db.settings.allowRegister, announcement: c.db.settings.announcement, banners: c.db.banners.filter((b) => b.position === 'home').sort((a, b) => a.sort - b.sort) }),
+  '/x/jumedia/site': (c) => ({ version: 'mock', siteName: c.db.settings.siteName, allowRegister: c.db.settings.allowRegister, announcement: c.db.settings.announcement, banners: c.db.banners.filter((b) => b.position === 'home').sort((a, b) => a.sort - b.sort) }),
 
   /** All data sources; `system` ones belong to the official account (`settings.officialMid`). */
   '/x/admin/datasources': (c) => {

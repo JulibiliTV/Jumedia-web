@@ -7,7 +7,7 @@ export interface Me {
   mid: number; uname: string; face: string; level_info?: { current_level: number; current_exp: number; next_exp: number | string }
   money: number; vipStatus: number; role?: 'admin' | 'user'; sign?: string
 }
-export interface Site { siteName: string; allowRegister: boolean; announcement: string; banners: { id: number; title: string; img: string; url: string }[] }
+export interface Site { siteName: string; allowRegister: boolean; announcement: string; version?: string; banners: { id: number; title: string; img: string; url: string }[] }
 
 interface Session { me: Me | null; ready: boolean; site: Site | null; refresh: () => Promise<void>; logout: () => Promise<void> }
 const Ctx = createContext<Session>({ me: null, ready: false, site: null, refresh: async () => {}, logout: async () => {} })

@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { libmediaAssets } from './build/libmediaAssets'
+import { frontendVersion } from './build/version'
 
 // API_PROXY 指向 Jumedia-server 时，前端以同源方式访问与 Juli 数据源一致的接口路径。
 const target = process.env.API_PROXY
@@ -13,6 +14,7 @@ const playerHeaders = {
 }
 
 export default defineConfig({
+  define: { __FRONTEND_VERSION__: JSON.stringify(frontendVersion()) },
   plugins: [react(), libmediaAssets()],
   build: {
     manifest: true,
