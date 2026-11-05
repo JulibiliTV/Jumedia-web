@@ -8,6 +8,7 @@ import { useAsync, useDebounced } from '../lib/hooks'
 import { useSession } from '../lib/session'
 import { Icon } from './Icon'
 import { LogoWordmark } from './Logo'
+import { RouteContent } from './RouteContent'
 import { Avatar, Level } from './ui'
 
 export function Wordmark({ suffix }: { suffix?: string }) {
@@ -331,11 +332,11 @@ export function SiteLayout() {
   return (
     <>
       <Header wide={RAIL.test(pathname)} />
-      {BARE.test(pathname) ? <Outlet />
-        : RAIL.test(pathname) ? <div className="frame wide"><div className="rail-col"><Rail /></div><div className="content"><Outlet /></div></div>
+      {BARE.test(pathname) ? <RouteContent><Outlet /></RouteContent>
+        : RAIL.test(pathname) ? <div className="frame wide"><div className="rail-col"><Rail /></div><div className="content"><RouteContent><Outlet /></RouteContent></div></div>
         : <>
           <nav className="mnav" aria-label="主导航">{NAV.map((n) => <NavLink key={n.to} to={n.to} end={n.end}>{n.label}</NavLink>)}</nav>
-          <div className="frame"><div className="side"><Sidebar home={pathname === '/'} /></div><main className="content">{announcement}<Outlet /></main></div>
+          <div className="frame"><div className="side"><Sidebar home={pathname === '/'} /></div><main className="content">{announcement}<RouteContent><Outlet /></RouteContent></main></div>
         </>}
     </>
   )

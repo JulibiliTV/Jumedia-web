@@ -1,4 +1,5 @@
 import type AVPlayer from '@libmedia/avplayer'
+import playerUrl from 'virtual:libmedia-entry'
 
 /**
  * The part of `HTMLVideoElement` the player drives. `<video>` satisfies it for
@@ -31,7 +32,9 @@ export const needsLibmedia = (format?: string) => !!format && !/^(mp4|flv)/.test
 const wasmBaseUrl = (import.meta.env.VITE_LIBMEDIA_WASM as string | undefined) || undefined
 
 let loading: Promise<typeof AVPlayer> | null = null
-const loadAVPlayer = () => (loading ??= import('@libmedia/avplayer').then((m) => m.default))
+const loadAVPlayer = () => (loading ??= import(/* @vite-ignore */ playerUrl)
+  .then((m) => m.default as typeof AVPlayer)
+  .catch((error) => { loading = null; throw error }))
 
 export class LibmediaEngine extends EventTarget implements MediaLike {
   private player?: AVPlayer

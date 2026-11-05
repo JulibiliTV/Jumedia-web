@@ -6,10 +6,12 @@ FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY index.html tsconfig.json vite.config.ts ./
+COPY index.html tsconfig.json tsconfig.node.json vite.config.ts ./
+COPY build build
 COPY public public
 COPY src src
-RUN VITE_MOCK=0 npm run build
+COPY scripts/check-bundle.mjs scripts/check-bundle.mjs
+RUN VITE_MOCK=0 npm run build && npm run check:bundle -- --production
 
 FROM busybox:1.37
 COPY --from=build /src/dist /dist

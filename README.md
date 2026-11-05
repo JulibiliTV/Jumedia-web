@@ -51,6 +51,7 @@ API_PROXY=http://127.0.0.1:8080 VITE_MOCK=0 npm run dev
 
 ```sh
 VITE_MOCK=0 npm run build
+npm run check:bundle -- --production
 ```
 
 产物在 `dist/`。最简单的部署方式是由后端直接提供：启动 Jumedia Server 时设置 `JUMEDIA_WEB_DIR=../Jumedia-web/dist`。也可以用任意静态服务器托管 `dist/`，此时需要把接口路径反向代理到后端，并把未命中的路径回退到 `index.html`。
@@ -78,6 +79,8 @@ docker compose pull web && docker compose up web
 - **点播**：MP4（H.264）使用浏览器原生播放；MKV 等其他容器通过 [libmedia](https://github.com/zhaohappy/libmedia) 在页面内解封装和解码（优先 WebCodecs 硬件解码，否则 WebAssembly 软解）。
 - **直播**：HLS 使用 hls.js 播放，也支持 MP4 直播流。
 - **弹幕**：protobuf 分段弹幕与直播聊天；支持发送、屏蔽词和样式设置。
+
+页面按功能模块加载；进入播放页面或打开播放预览时才加载播放器。原生 MP4 播放不加载额外播放引擎，HLS 与 libmedia 按媒体格式加载。libmedia 的运行时与异步分块随网页构建产物一起发布，解码器 WebAssembly 文件仍由 `VITE_LIBMEDIA_WASM` 指定的地址按需提供。
 
 ## 演示媒体
 
@@ -129,6 +132,7 @@ scripts/               演示媒体导入脚本
 ```sh
 npm run typecheck   # 类型检查
 npm run build       # 类型检查并构建
+npm run check:bundle # 检查首屏体积、异步分块和播放资源完整性
 npm run preview     # 预览构建产物
 ```
 
