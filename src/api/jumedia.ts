@@ -117,7 +117,7 @@ export const medalTakeOff = () => post('live', '/xlive/web-room/v1/fansMedal/tak
 export const medalJoin = (roomid: number) => post('live', '/xlive/web-room/v1/fansMedal/join', { ...csrf(), roomid })
 
 // ---------- 数据源（Emby，只读） ----------
-export type DataSourceForm = { id?: number; name: string; url: string; username: string; password: string; clear_password?: boolean; libraries?: string; auto_sync: boolean }
+export type DataSourceForm = { id?: number; name: string; url: string; username: string; password: string; clear_password?: boolean; libraries?: string; auto_sync: boolean; proxy_playback: boolean }
 /** Same routes under `/x/web/` (the caller's own sources) and `/x/admin/` (system sources, owned by the official account). */
 export function dataSourceAPI(scope: 'web' | 'admin') {
   const base = `/x/${scope}/datasource`

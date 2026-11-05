@@ -8,7 +8,7 @@ import { Avatar, confirmDialog, Empty, Modal, Spinner, Switch, toast, toastError
 export interface Library { id: string; name: string; type: string; enabled: boolean; items: number; collection_id: number }
 export interface DataSource {
   id: number; mid: number; system: boolean; type: 'emby'; name: string; url: string; username: string; has_password: boolean; server_name: string
-  libraries: Library[]; auto_sync: boolean; status: 'idle' | 'syncing' | 'ok' | 'error'; message: string; last_sync: number; ctime: number; archives: number
+  libraries: Library[]; auto_sync: boolean; proxy_playback: boolean; status: 'idle' | 'syncing' | 'ok' | 'error'; message: string; last_sync: number; ctime: number; archives: number
   owner: { mid: number; name: string; face: string }
 }
 
@@ -42,7 +42,14 @@ export function DataSourceCard({ ds, scope, onChanged, onEdit, showOwner }: { ds
       <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
         <span className="ds-ic"><Icon name="box" size={20} /></span>
         <span className="stack grow" style={{ gap: 2, minWidth: 0 }}>
-          <span className="row" style={{ gap: 8, fontSize: 16, fontWeight: 700 }}>{ds.name}<span className="ds-state" style={{ background: tone[0], color: tone[1] }}>{ds.status === 'syncing' && <Spinner size={10} />}{label}</span>{ds.system && <span className="ds-state" style={{ background: 'var(--brand-soft)', color: 'var(--brand)' }}>系统</span>}</span>
+          <span className="row wrap" style={{ gap: 8, fontSize: 16, fontWeight: 700 }}>
+            <span className="clamp-1" title={ds.name} style={{ minWidth: 0, maxWidth: '100%' }}>{ds.name}</span>
+            <span className="row wrap" style={{ gap: 8 }}>
+              <span className="ds-state" style={{ background: tone[0], color: tone[1], whiteSpace: 'nowrap' }}>{ds.status === 'syncing' && <Spinner size={10} />}{label}</span>
+              <span className="ds-state" style={{ background: ds.proxy_playback !== false ? 'var(--success-soft)' : 'var(--surface-2)', color: ds.proxy_playback !== false ? 'var(--success)' : 'var(--text-2)', whiteSpace: 'nowrap' }}>{ds.proxy_playback !== false ? '代理已开启' : '代理已关闭 · Emby 直连'}</span>
+              {ds.system && <span className="ds-state" style={{ background: 'var(--brand-soft)', color: 'var(--brand)', whiteSpace: 'nowrap' }}>系统</span>}
+            </span>
+          </span>
           <span className="mono faint clamp-1" style={{ fontSize: 12 }}>{ds.url}{ds.server_name && ` · ${ds.server_name}`}</span>
           <span className="row muted" style={{ gap: 6, fontSize: 12 }}><Icon name="user" size={13} />账号密码登录 · {ds.username}</span>
         </span>
@@ -70,7 +77,7 @@ type Probe = { server_name: string; version: string; libraries: { id: string; na
 /** Add / edit form: connect first (lists libraries), then pick which libraries to mirror. */
 export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage }: { scope: 'web' | 'admin'; value?: DataSource; onClose: () => void; onSaved: () => void; inline?: boolean; usage?: string }) {
   const api = dataSourceAPI(scope)
-  const [f, setF] = useState<DataSourceForm>({ id: value?.id, name: value?.name ?? '', url: value?.url ?? '', username: value?.username ?? '', password: '', auto_sync: value?.auto_sync ?? true })
+  const [f, setF] = useState<DataSourceForm>({ id: value?.id, name: value?.name ?? '', url: value?.url ?? '', username: value?.username ?? '', password: '', auto_sync: value?.auto_sync ?? true, proxy_playback: value?.proxy_playback ?? true })
   const [clear, setClear] = useState(false)
   const [probe, setProbe] = useState<Probe | null>(value ? { server_name: value.server_name, version: '', libraries: value.libraries } : null)
   const [picked, setPicked] = useState<Set<string>>(new Set(value ? value.libraries.filter((l) => l.enabled).map((l) => l.id) : []))
@@ -123,6 +130,11 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
           {!probe.libraries.length && <span className="faint" style={{ fontSize: 13 }}>该账号下没有电影、剧集等视频媒体库</span>}
         </div>
       )}
+      <div className="stack" style={{ gap: 6 }}>
+        <label className="check"><input type="checkbox" checked={f.proxy_playback} onChange={(e) => edit({ proxy_playback: e.target.checked })} />通过 Jumedia 代理播放</label>
+        <div className="muted" style={{ fontSize: 13 }}>{f.proxy_playback ? '视频流量经过 Jumedia 服务端。' : '播放器直接访问 Emby，视频流量不经过 Jumedia；播放链接会包含该 Emby 账号的访问令牌。'}</div>
+        {import.meta.env.VITE_MOCK !== '0' && <div className="muted" style={{ fontSize: 13 }}>浏览器演示模式始终直连 Emby，代理播放需要使用 Jumedia 服务端。</div>}
+      </div>
       <label className="row" style={{ gap: 16 }}><span className="grow"><b style={{ fontSize: 14, fontWeight: 600 }}>自动同步</b><div className="muted" style={{ fontSize: 13 }}>定时同步新增和修改</div></span><Switch on={f.auto_sync} onChange={(auto_sync) => edit({ auto_sync })} /></label>
       <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
         <button type="button" className="btn lg" onClick={onClose}>取消</button>

@@ -52,7 +52,7 @@ export interface DataSourceLibrary { id: string; name: string; type: string; ena
  */
 export interface DataSource {
   id: number; mid: number; system: boolean; type: 'emby'; name: string; url: string; username: string; password: string
-  server_name: string; server_id: string; libraries: DataSourceLibrary[]; auto_sync: boolean
+  server_name: string; server_id: string; libraries: DataSourceLibrary[]; auto_sync: boolean; proxy_playback: boolean
   status: 'idle' | 'syncing' | 'ok' | 'error'; message: string; last_sync: number; ctime: number
 }
 export interface Episode {
@@ -431,6 +431,7 @@ export function getDB(): DB {
         }
         base.settings.officialMid = parsed.users.find((u) => u.role === 'admin')?.mid ?? 0
         for (const [key, value] of Object.entries(base.settings)) if (parsed.settings[key] === undefined) parsed.settings[key] = value
+        for (const source of parsed.dataSources) source.proxy_playback ??= true
         setDemoPackage(parsed.demoPackage); db = parsed; save(); return parsed
       }
     }
@@ -585,7 +586,7 @@ function upgrade19(d: DB) {
     for (const mid of [...owners.keys()].sort((a, b) => a - b)) {
       const id = ++d.seq
       byOwner.set(mid, id)
-      d.dataSources.push({ id, mid, system: false, type: 'emby', name: '演示 Emby', url: connection.url.replace(/\/+$/, ''), username: connection.username, password: connection.password ?? '', server_name: '', server_id: '', libraries: [...owners.get(mid)!].sort().map((name) => ({ id: name, name, type: '', enabled: true, items: 0, collection_id: 0 })), auto_sync: false, status: 'idle', message: '', last_sync: 0, ctime: now() })
+      d.dataSources.push({ id, mid, system: false, type: 'emby', name: '演示 Emby', url: connection.url.replace(/\/+$/, ''), username: connection.username, password: connection.password ?? '', server_name: '', server_id: '', libraries: [...owners.get(mid)!].sort().map((name) => ({ id: name, name, type: '', enabled: true, items: 0, collection_id: 0 })), auto_sync: false, proxy_playback: true, status: 'idle', message: '', last_sync: 0, ctime: now() })
     }
     const rewrite = <T,>(value: T, mid: number) => convert(value, byOwner.get(mid) ?? 0) as T
     d.archives = d.archives.map((a) => rewrite(a, a.mid))

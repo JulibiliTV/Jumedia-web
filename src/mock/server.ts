@@ -1790,8 +1790,8 @@ async function saveSource(c: Ctx, existing: DataSource | undefined, system: bool
     return { ...l, enabled: enabled ? enabled.has(l.id) : old?.enabled ?? true, items: old?.items ?? 0, collection_id: old?.collection_id ?? 0 }
   })
   const name = (c.p.name ?? '').trim().slice(0, 30) || info.server_name || 'Emby'
-  const ds: DataSource = existing ?? { id: nextID(), mid, system, type: 'emby', name, url, username, password, server_name: '', server_id: '', libraries: [], auto_sync: true, status: 'idle', message: '', last_sync: 0, ctime: ts() }
-  Object.assign(ds, { name, url, username, password, server_name: info.server_name, server_id: info.server_id, libraries, auto_sync: c.p.auto_sync === undefined ? ds.auto_sync : truthy(c.p.auto_sync) })
+  const ds: DataSource = existing ?? { id: nextID(), mid, system, type: 'emby', name, url, username, password, server_name: '', server_id: '', libraries: [], auto_sync: true, proxy_playback: true, status: 'idle', message: '', last_sync: 0, ctime: ts() }
+  Object.assign(ds, { name, url, username, password, server_name: info.server_name, server_id: info.server_id, libraries, auto_sync: c.p.auto_sync === undefined ? ds.auto_sync : truthy(c.p.auto_sync), proxy_playback: c.p.proxy_playback === undefined ? ds.proxy_playback ?? true : truthy(c.p.proxy_playback) })
   if (!existing) c.db.dataSources.push(ds)
   forgetSession(ds.id)
   log(c, existing ? '修改数据源' : '添加数据源', `${ds.name}${system ? '（系统）' : ''}`)

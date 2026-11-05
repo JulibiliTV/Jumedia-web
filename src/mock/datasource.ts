@@ -13,8 +13,8 @@ import { type Archive, type ArchiveField, type ArchiveOrigin, av2bv, type DataSo
  * file plays in `<video>` (MP4/M4V/MOV, H.264, AAC/MP3), otherwise
  * `raw-{container}` (e.g. `raw-mkv`): the original file is served untouched and
  * the web player decodes it in the page with libmedia. Emby never transcodes.
- * Canonical paths, shared with Jumedia-server, which proxies them (with Range)
- * and keeps credentials server-side:
+ * Jumedia-server defaults to proxy playback (with Range); disabling
+ * `proxy_playback` returns an authenticated Emby stream URL instead:
  *   /media/emby/{item}.mp4?source={id}&ds={ds}             direct
  *   /media/emby/{item}/file.{container}?source={id}&ds={ds} raw (playurl `format` = container)
  *   /media/emby/{item}/image/{Primary|Backdrop|Thumb}?ds={ds}&tag={tag}
@@ -354,7 +354,7 @@ export function purgeSource(db: DB, ds: DataSource) {
 
 export const dsHlsPath = (item: string, source: string, ds: number) => `/media/emby/${item}/hls/index.m3u8?source=${encodeURIComponent(source)}&ds=${ds}`
 
-/** `embyds:` ref → the original file on Emby (`Static=true`: no transcoding). The mock links Emby directly; the server proxies it. */
+/** `embyds:` ref → the original file on Emby (`Static=true`: no transcoding). The browser mock always links Emby directly; only the server can proxy playback. */
 export async function dsMediaURL(db: DB, ref: string): Promise<string> {
   const r = parseDsRef(ref)
   const ds = r && db.dataSources.find((x) => x.id === r.ds)
@@ -403,7 +403,7 @@ export function dataSourceJSON(db: DB, ds: DataSource) {
   const { password, ...rest } = ds
   const u = db.users.find((x) => x.mid === ds.mid)
   return {
-    ...rest, has_password: !!password, owner: { mid: ds.mid, name: u?.uname ?? '已注销用户', face: userFace(ds.mid, u?.face) },
+    ...rest, proxy_playback: ds.proxy_playback ?? true, has_password: !!password, owner: { mid: ds.mid, name: u?.uname ?? '已注销用户', face: userFace(ds.mid, u?.face) },
     archives: db.archives.filter((a) => a.origin?.ds === ds.id && a.state !== -100 && a.state !== -6).length,
   }
 }
