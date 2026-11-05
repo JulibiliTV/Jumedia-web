@@ -941,7 +941,7 @@ export function DataSourcesAdmin() {
           : <form className="row" style={{ marginBottom: 6 }} onSubmit={(e) => { e.preventDefault(); setQ(kw); setPn(1) }}><span className="row" style={{ width: 240, height: 34, borderRadius: 17, background: 'var(--surface)', border: '1px solid var(--line)', padding: '0 12px', gap: 8, color: 'var(--text-3)' }}><Icon name="search" size={15} /><input style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'none', color: 'var(--text)' }} value={kw} onChange={(e) => setKw(e.target.value)} placeholder="名称 / 地址 / 用户" /></span></form>}
       </div>
       {d.loading && !d.data ? <Loading /> : !list?.length ? <div className="ds-card"><Empty icon="box" title={scope === 'system' ? '还没有系统数据源' : '没有用户数据源'} hint={scope === 'system' ? '系统数据源的媒体库会作为官方账号的视频与合集展示' : undefined} /></div>
-        : <div className="g2">{list.map((ds) => <DataSourceCard key={ds.id} ds={ds} scope="admin" showOwner={scope === 'user'} onChanged={d.reload} onEdit={ds.system ? () => setEdit(ds) : undefined} />)}</div>}
+        : <div className="g2">{list.map((ds) => <DataSourceCard key={ds.id} ds={ds} scope="admin" showOwner={scope === 'user'} onChanged={d.reload} onEdit={() => setEdit(ds)} />)}</div>}
       <Pager page={pn} total={d.data?.page.total ?? 0} size={20} onChange={setPn} />
       {edit && <DataSourceEditor scope="admin" value={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); d.reload() }} />}
     </div>

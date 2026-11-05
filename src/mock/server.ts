@@ -1733,8 +1733,8 @@ const routes: Record<string, Handler> = {
     const pn = int(c.p.pn, 1), ps = int(c.p.ps, 20)
     return { list: page(list, pn, ps).map((x) => dataSourceJSON(c.db, x)), page: { pn, ps, total: list.length }, official: owner(Number(c.db.settings.officialMid)) }
   },
-  '/x/admin/datasource/test': async (c) => { admin(c); return testSource(c, systemSource(c, true), true) },
-  '/x/admin/datasource/save': async (c) => { admin(c); return saveSource(c, systemSource(c, true), true) },
+  '/x/admin/datasource/test': async (c) => { admin(c); return testSource(c, c.p.id ? anySource(c) : undefined, true) },
+  '/x/admin/datasource/save': async (c) => { admin(c); return saveSource(c, c.p.id ? anySource(c) : undefined, true) },
   '/x/admin/datasource/sync': (c) => { admin(c); return startSync(c, anySource(c)) },
   '/x/admin/datasource/delete': (c) => { admin(c); deleteSource(c, anySource(c)); return null },
 }
@@ -1752,10 +1752,6 @@ function ownSource(c: Ctx, optional = false): DataSource | undefined {
   const ds = c.db.dataSources.find((x) => x.id === int(c.p.id) && x.mid === c.me!.mid && !x.system)
   return ds ?? fail(-404, '数据源不存在')
 }
-function systemSource(c: Ctx, optional = false): DataSource | undefined {
-  if (optional && !c.p.id) return undefined
-  return c.db.dataSources.find((x) => x.id === int(c.p.id) && x.system) ?? fail(-404, '数据源不存在')
-}
 const anySource = (c: Ctx) => c.db.dataSources.find((x) => x.id === int(c.p.id)) ?? fail(-404, '数据源不存在')
 
 /** Address and credentials from the request; an empty password keeps the stored one unless `clear_password`. */
@@ -1772,11 +1768,12 @@ async function connect(url: string, username: string, password: string) {
   try { return await probeSource(url, username, password) } catch (e) { return fail(-400, e instanceof SourceError ? e.message : '无法连接 Emby 服务器') }
 }
 function testSource(c: Ctx, existing: DataSource | undefined, system: boolean) {
-  const { url, username, password } = credentials(c, existing, system)
+  const { url, username, password } = credentials(c, existing, existing?.system ?? system)
   return connect(url, username, password)
 }
 
 async function saveSource(c: Ctx, existing: DataSource | undefined, system: boolean) {
+  system = existing?.system ?? system
   const { url, username, password } = credentials(c, existing, system)
   if (!existing && !system && c.db.dataSources.filter((x) => x.mid === c.me!.mid && !x.system).length >= MAX_SOURCES) fail(-400, `最多添加 ${MAX_SOURCES} 个数据源`)
   if (existing?.status === 'syncing') fail(-400, '正在同步中，请稍后再修改')
