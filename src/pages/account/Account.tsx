@@ -3,7 +3,7 @@ import { Link, Outlet, useSearchParams } from 'react-router-dom'
 import * as juli from '../../api/juli'
 import * as jm from '../../api/jumedia'
 import { compact, countText, dateTimeText, formatDuration, liveItem, timeText, type VideoItem, videoItem } from '../../api/normalize'
-import { type DanmakuSettings, defaultDanmakuSettings } from '../../api/protobuf'
+import { type DanmakuSettings, areaPresetIndex, areaPresets, defaultDanmakuSettings, updateDanmakuSettings } from '../../api/protobuf'
 import { medalHex } from '../../components/Medal'
 import { Grid, RowCard, UserCard, itemLink } from '../../components/Cards'
 import { Icon } from '../../components/Icon'
@@ -373,7 +373,7 @@ export function Settings() {
     try { const r = await jm.updatePassword(pwd.old, pwd.next); if (r.code) throw new Error(r.message); setPwd({ old: '', next: '' }); toast('密码已修改', 'success') } catch (err) { toastError(err) }
   }
   const saveDm = async (patch: Partial<DanmakuSettings>) => {
-    const next = { ...dm, ...patch }
+    const next = updateDanmakuSettings(dm, patch)
     setDm(next)
     try { await juli.dmSaveConfig(next) } catch (err) { toastError(err) }
   }
@@ -405,7 +405,7 @@ export function Settings() {
             <label key={k} className="row between" style={{ height: 36 }}><span>{label}</span><Switch on={dm[k]} onChange={(v) => saveDm({ [k]: v })} /></label>
           ))}
           <div className="field"><label>不透明度 {Math.round(dm.opacity * 100)}%</label><input type="range" min={0.1} max={1} step={0.05} value={dm.opacity} onChange={(e) => setDm({ ...dm, opacity: +e.target.value })} onMouseUp={() => saveDm({})} /></div>
-          <div className="field"><label>显示区域 {dm.area}%</label><input type="range" min={25} max={100} step={25} value={dm.area} onChange={(e) => setDm({ ...dm, area: +e.target.value })} onMouseUp={() => saveDm({})} /></div>
+          <div className="field"><label htmlFor="dm-area">显示区域 {areaPresets[areaPresetIndex(dm)]}%</label><input id="dm-area" type="range" aria-valuetext={areaPresets[areaPresetIndex(dm)] + '%'} min={0} max={4} value={areaPresetIndex(dm)} onChange={(e) => setDm(updateDanmakuSettings(dm, { area: areaPresets[+e.target.value] }))} onPointerUp={() => saveDm({})} onKeyUp={() => saveDm({})} /></div>
         </div>
         <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>云端屏蔽规则：{ruleCount} 条</p>
       </div>

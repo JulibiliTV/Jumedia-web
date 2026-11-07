@@ -175,8 +175,11 @@ function dmBytes(db: DB, cid: number, index: number) {
 function dmView(db: DB, mid?: number) {
   const s = (mid && db.dmConfig[mid]) || {}
   const b = (k: string, d = true) => (s[k] === undefined ? d : s[k] === 'true')
+  const area = int(s.dmarea, 50)
+  const state = !b('dm_switch') ? 3 : s.dm_switch_state === '2' ? 2 : 1
   const cfg = new Writer().bool(1, b('dm_switch')).bool(2, b('ai_switch', false)).uint(3, int(s.ai_level, 1)).bool(4, b('blocktop')).bool(5, b('blockscroll')).bool(6, b('blockbottom')).bool(7, b('blockcolor'))
-    .bool(9, b('preventshade')).bool(10, b('dmask')).float(11, Number(s.opacity ?? 0.8)).uint(12, int(s.dmarea, 50)).float(13, Number(s.speedplus ?? 1)).float(14, Number(s.fontsize ?? 1))
+    .bool(9, b('preventshade')).bool(10, b('dmask')).float(11, Number(s.opacity ?? 0.8)).uint(12, area).float(13, Number(s.speedplus ?? 1)).float(14, Number(s.fontsize ?? 1))
+    .bool(24, b('blocktop') && b('blockbottom')).uint(25, area).uint(28, state)
   return new Writer().uint(1, 1).bytes(10, cfg.finish()).finish()
 }
 
@@ -708,13 +711,29 @@ const routes: Record<string, Handler> = {
     const pending = requestMockDanmaku(c.db, int(c.p.oid))
     return { __bytes: dmBytes(c.db, int(c.p.oid), int(c.p.segment_index, 1)), __headers: { 'X-Jumedia-Danmaku-Pending': String(pending), 'Cache-Control': 'no-store' } }
   },
-  '/x/v2/dm/web/view': (c) => ({ __bytes: dmView(c.db, c.me?.mid) }),
+  '/x/v2/dm/web/view': (c) => ({ __bytes: dmView(c.db, c.me?.mid), __headers: { 'Cache-Control': 'private, no-store' } }),
   '/x/v2/dm/web/config': (c) => {
     const u = csrf(c)
     const keys = ['dm_switch', 'blockscroll', 'blocktop', 'blockbottom', 'blockcolor', 'opacity', 'fontsize', 'speedplus', 'dmarea', 'preventshade', 'ai_switch', 'ai_level', 'dmask']
     const next = Object.fromEntries(keys.filter((k) => c.p[k] !== undefined).map((k) => [k, c.p[k]]))
     const prev = c.db.dmConfig[u.mid] ?? {}
-    if (keys.every((k) => prev[k] === next[k])) fail(23004, '设置未变更')
+    const { dm_area_v2: area, blocktop_bottom: fixed, dm_switch_state: state } = c.p
+    if (area !== undefined) {
+      if (!/^[+-]?\d+$/.test(area) || Number(area) < 0 || Number(area) > 100) fail(-400, '弹幕显示区域无效')
+      next.dmarea = String(Number(area))
+    }
+    if (fixed !== undefined) {
+      if (fixed !== 'true' && fixed !== 'false') fail(-400, '固定弹幕开关无效')
+      next.blocktop = next.blockbottom = fixed
+    }
+    if (state !== undefined) {
+      if (!['1', '2', '3'].includes(state)) fail(-400, '弹幕开关状态无效')
+      next.dm_switch_state = state
+      next.dm_switch = String(state !== '3')
+    } else if (next.dm_switch !== undefined && prev.dm_switch_state !== undefined) {
+      next.dm_switch_state = next.dm_switch !== 'true' ? '3' : prev.dm_switch_state === '2' ? '2' : '1'
+    }
+    if (Object.keys(prev).length === Object.keys(next).length && Object.keys(next).every((k) => prev[k] === next[k])) fail(23004, '设置未变更')
     c.db.dmConfig[u.mid] = { ...prev, ...next }
     return null
   },

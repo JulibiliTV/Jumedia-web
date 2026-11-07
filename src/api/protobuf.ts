@@ -56,6 +56,7 @@ export function decodeSegment(data: ArrayBuffer): DanmakuCue[] {
 
 export interface DanmakuSettings {
   enabled: boolean; smartFilter: boolean; blockLevel: number
+  reduced?: boolean
   showTop: boolean; showScroll: boolean; showBottom: boolean; showColor: boolean
   avoidSubtitles: boolean; avoidPeople: boolean; opacity: number; area: number; speed: number; fontScale: number
 }
@@ -65,25 +66,50 @@ export const defaultDanmakuSettings: DanmakuSettings = {
   avoidSubtitles: true, avoidPeople: true, opacity: 0.8, area: 50, speed: 1, fontScale: 1,
 }
 
+export function updateDanmakuSettings(current: DanmakuSettings, patch: Partial<DanmakuSettings>): DanmakuSettings {
+  const next = { ...current, ...patch }
+  if (patch.enabled !== undefined || patch.area !== undefined) next.reduced = false
+  return next
+}
+
+export function displayArea(s: DanmakuSettings): number {
+  return s.reduced ? 10 : s.area || 100
+}
+
+export const areaPresets = [10, 25, 50, 75, 100] as const
+export function areaPresetIndex(s: DanmakuSettings): number {
+  return Math.round(displayArea(s) / 25)
+}
+
 const float32 = (b?: Uint8Array) => (b && b.length === 4 ? new DataView(b.buffer, b.byteOffset, 4).getFloat32(0, true) : 0)
 
 export function decodeWebView(data: ArrayBuffer): DanmakuSettings | null {
   const config = fields(new Uint8Array(data)).filter((f) => f.number === 10 && f.wire === 2).pop()
   if (!config?.bytes) return null
   const v = fields(config.bytes)
-  const num = (k: number) => v.filter((x) => x.number === k && x.wire === 0).pop()?.int ?? 0
+  const scalar = (k: number) => v.filter((x) => x.number === k && x.wire === 0).pop()?.int
+  const num = (k: number) => scalar(k) ?? 0
   const flt = (k: number) => float32(v.filter((x) => x.number === k && x.wire === 5).pop()?.bytes)
+  const state = num(28)
+  const modern = v.some(f => f.wire === 0 && f.number >= 24 && f.number <= 28)
+  const fixed = num(24) !== 0
+  // Older settings may allow only one fixed position; keep both individual controls editable.
+  const split = scalar(4) !== undefined && scalar(6) !== undefined && num(4) !== num(6)
   return {
-    enabled: num(1) !== 0, smartFilter: num(2) !== 0, blockLevel: Math.min(10, num(3)),
-    showTop: num(4) !== 0, showScroll: num(5) !== 0, showBottom: num(6) !== 0, showColor: num(7) !== 0,
-    avoidSubtitles: num(9) !== 0, avoidPeople: num(10) !== 0, opacity: flt(11) || 0.8,
-    area: Math.min(100, num(12)), speed: flt(13) || 1, fontScale: flt(14) || 1,
+    enabled: state >= 1 && state <= 3 ? state !== 3 : num(1) !== 0, reduced: state === 2,
+    smartFilter: num(2) !== 0, blockLevel: Math.min(10, num(3)),
+    showTop: modern && !split ? fixed : num(4) !== 0, showScroll: num(5) !== 0,
+    showBottom: modern && !split ? fixed : num(6) !== 0, showColor: num(7) !== 0,
+    avoidSubtitles: num(9) !== 0, avoidPeople: num(10) !== 0, opacity: v.some(f => f.number === 11 && f.wire === 5) ? flt(11) : 0.8,
+    area: Math.min(100, num(modern ? 25 : 12)), speed: flt(13) || 1, fontScale: flt(14) || 1,
   }
 }
 
 /** Field names `PlayerDanmakuSettings.remoteParameters` posts to `/x/v2/dm/web/config`. */
 export function remoteParameters(s: DanmakuSettings): Record<string, string> {
   return {
+    dm_switch_state: s.enabled ? (s.reduced ? '2' : '1') : '3', dm_area_v2: String(s.area),
+    ...(s.showTop === s.showBottom ? { blocktop_bottom: String(s.showTop) } : {}),
     dm_switch: String(s.enabled), blockscroll: String(s.showScroll), blocktop: String(s.showTop), blockbottom: String(s.showBottom),
     blockcolor: String(s.showColor), opacity: String(s.opacity), fontsize: String(s.fontScale), speedplus: String(s.speed),
     dmarea: String(s.area), preventshade: String(s.avoidSubtitles), ai_switch: String(s.smartFilter), ai_level: String(s.blockLevel),

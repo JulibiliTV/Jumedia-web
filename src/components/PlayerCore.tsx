@@ -2,7 +2,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import * as juli from '../api/juli'
 import * as jm from '../api/jumedia'
 import { formatDuration } from '../api/normalize'
-import { type DanmakuCue, type DanmakuSettings, defaultDanmakuSettings } from '../api/protobuf'
+import { type DanmakuCue, type DanmakuSettings, areaPresetIndex, areaPresets, defaultDanmakuSettings, displayArea, updateDanmakuSettings } from '../api/protobuf'
 import { useSession } from '../lib/session'
 import { Icon } from './Icon'
 import { LibmediaEngine, type MediaLike, needsLibmedia } from './libmediaEngine'
@@ -247,7 +247,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
   const saveTimer = useRef(0)
   const updateSettings = (patch: Partial<DanmakuSettings>) => {
     settingsRevision.current += 1
-    const next = { ...settings, ...patch }
+    const next = updateDanmakuSettings(settingsRef.current, patch)
     setSettings(next)
     try { localStorage.setItem(LOCAL_DM, JSON.stringify(next)) } catch { /* ignore */ }
     if (me) { clearTimeout(saveTimer.current); saveTimer.current = window.setTimeout(() => juli.dmSaveConfig(next).catch(() => {}), 800) }
@@ -316,7 +316,8 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
     const H = host.clientHeight, W = host.clientWidth
     const size = Math.round((cue.fontSize / 25) * 22 * s.fontScale * Math.min(1.25, Math.max(0.7, W / 960)))
     const lineH = Math.round(size * 1.25)
-    const lanes = Math.max(1, Math.floor((H * (s.area || 100)) / 100 / lineH))
+    const usableHeight = H * Math.min(displayArea(s), s.avoidSubtitles ? 85 : 100) / 100
+    const lanes = Math.max(1, Math.floor((usableHeight - 6) / lineH))
     const el = document.createElement('div')
     el.className = `dm${cue.mode === 4 || cue.mode === 5 ? ' fixed' : ''}${mine ? ' mine' : ''}`
     el.textContent = cue.text
@@ -336,7 +337,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
       } else if (!inLane.length) lane = l
     }
     if (lane < 0) { if (!mine) { el.remove(); return } lane = 0 }
-    const y = cue.mode === 4 ? H - (lane + 1) * lineH - 6 : lane * lineH + 6
+    const y = cue.mode === 4 ? Math.max(0, usableHeight - (lane + 1) * lineH - 6) : lane * lineH + 6
     el.style.top = y + 'px'
     actives.current.push({ cue: { ...cue, time: Math.max(cue.time, t - 0.05) }, el, lane, width, mine })
   }, [])
@@ -531,7 +532,7 @@ export function Player({ source, onEnded, liveFeed, chaptersOut, seekTo }: { sou
                   <div className="line"><span>不透明度 {Math.round(settings.opacity * 100)}%</span><input type="range" min={0.1} max={1} step={0.05} value={settings.opacity} onChange={(e) => updateSettings({ opacity: +e.target.value })} /></div>
                   <div className="line"><span>字号 {Math.round(settings.fontScale * 100)}%</span><input type="range" min={0.5} max={1.6} step={0.05} value={settings.fontScale} onChange={(e) => updateSettings({ fontScale: +e.target.value })} /></div>
                   <div className="line"><span>速度 {settings.speed.toFixed(1)}</span><input type="range" min={0.4} max={1.6} step={0.1} value={settings.speed} onChange={(e) => updateSettings({ speed: +e.target.value })} /></div>
-                  <div className="line"><span>显示区域 {settings.area}%</span><input type="range" min={25} max={100} step={25} value={settings.area} onChange={(e) => updateSettings({ area: +e.target.value })} /></div>
+                  <div className="line"><span>显示区域 {areaPresets[areaPresetIndex(settings)]}%</span><input type="range" aria-label="显示区域" aria-valuetext={areaPresets[areaPresetIndex(settings)] + '%'} min={0} max={4} value={areaPresetIndex(settings)} onChange={(e) => updateSettings({ area: areaPresets[+e.target.value] })} /></div>
                 </div>
               )}
             </div>
