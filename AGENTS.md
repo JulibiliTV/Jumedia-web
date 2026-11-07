@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Jumedia-web 是 Jumedia 的 React、TypeScript、Vite 网页端，包含前台、创作中心、管理后台和浏览器内 Mock。真实后端位于同级 `Jumedia-server`，电视客户端位于 `JuliBiliTV`。
+Jumedia-web 是 Jumedia 的 React、TypeScript、Vite 网页端，包含前台、创作中心、管理后台和浏览器内 Mock。真实后端位于同级 `Jumedia-server`，电视客户端位于 `JulibiliTV`。
 
 ## 开发约定
 
