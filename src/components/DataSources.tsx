@@ -66,7 +66,12 @@ export function DataSourceCard({ ds, scope, onChanged, onEdit, showOwner }: { ds
       </div>
       {ds.status === 'error' && <span className="ds-err">{ds.message}</span>}
       <div className="ds-foot">
-        <span>{ds.archives} 个视频 · {ds.last_sync > 0 ? `上次同步 ${dateTimeText(ds.last_sync)}` : '尚未同步'}{ds.auto_sync ? ' · 自动同步' : ''}{enabled.length > 0 && ` · ${enabled.length} 个媒体库`}</span>
+        <dl className="ds-summary">
+          <div><dt>已导入稿件</dt><dd>{ds.archives} 个</dd></div>
+          <div><dt>已接入媒体库</dt><dd>{enabled.length} 个</dd></div>
+          <div><dt>上次整库同步</dt><dd>{ds.last_sync > 0 ? dateTimeText(ds.last_sync) : '尚未同步'}</dd></div>
+          {ds.auto_sync && <div><dt>自动同步</dt><dd>已开启</dd></div>}
+        </dl>
         <button type="button" className="btn" disabled={busy || ds.status === 'syncing'} onClick={sync}><Icon name="refresh" size={14} />立即同步</button>
         {scope === 'web' && onEdit && <button type="button" className="btn primary" disabled={ds.status === 'syncing'} onClick={() => setImporting(true)}>获取视频</button>}
         {onEdit && <button type="button" className="btn" disabled={ds.status === 'syncing'} onClick={onEdit}>编辑</button>}

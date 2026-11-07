@@ -229,7 +229,10 @@
 .ds-err { padding: 8px 12px; border-radius: 8px; background: var(--danger-soft); color: #c43f3b; font-size: 12px; }
 .ds-ok { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: rgba(25, 168, 101, 0.1); color: var(--success); font-size: 13px; }
 .ds-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
-.ds-foot > span { flex: 1; min-width: 180px; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ds-summary { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0 0 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ds-summary > div { display: flex; align-items: baseline; gap: 6px; }
+.ds-summary dt { color: var(--text-2); }
+.ds-summary dd { margin: 0; font-weight: 600; }
 .ds-foot .btn { height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; }
 .ds-pick { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
 .ds-pick.on { border-color: var(--brand); background: rgba(47, 134, 246, 0.08); }
