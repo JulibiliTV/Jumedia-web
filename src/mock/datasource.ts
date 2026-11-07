@@ -1,9 +1,10 @@
+import { sourceNames, type SourceType } from '../lib/dataSource'
 import { userFace } from './render'
 import { queueMockDanmaku } from './dandanplay'
 import { type Archive, type ArchiveField, type ArchiveOrigin, av2bv, type DataSource, type DataSourceLibrary, type DB, type Page, type Region, save } from './db'
 
 /**
- * User-configured Emby data sources: login, library discovery and the sync
+ * User-configured media sources: login, library discovery and the sync
  * that mirrors a source's video libraries into Jumedia archives (one per
  * movie, one multi-page archive per series) and one 合集 per library.
  * Emby is only ever read. Edits made in Jumedia lock the edited fields so later
@@ -39,13 +40,14 @@ export class SourceError extends Error {
 let fetcher: typeof fetch = (...a) => fetch(...a)
 export const setSourceFetcher = (f: typeof fetch) => { fetcher = f }
 
-/** `https://host[:port][/path]` → Emby API root, appending `/emby` when missing. */
-export function embyBase(address: string): string {
+/** Jellyfin uses the configured base path. Emby needs the API suffix. */
+export function sourceBase(address: string, type: SourceType): string {
   let u: URL
-  try { u = new URL(address.trim()) } catch { throw new SourceError('Emby 服务器地址格式不正确') }
-  if (!['http:', 'https:'].includes(u.protocol)) throw new SourceError('仅支持 http / https 的 Emby 地址')
+  try { u = new URL(address.trim()) } catch { throw new SourceError('媒体服务器地址格式不正确') }
+  if (!['http:', 'https:'].includes(u.protocol)) throw new SourceError('媒体服务器地址仅支持 http / https')
+  if (u.username || u.password) throw new SourceError('媒体服务器地址格式不正确')
   const path = u.pathname.replace(/\/+$/, '')
-  return u.origin + (/\/emby$/i.test(path) ? path : path + '/emby')
+  return u.origin + (type === 'jellyfin' || /\/emby$/i.test(path) ? path : path + '/emby')
 }
 
 /** Loopback, link-local, private and `.local` hosts — refused for user sources unless the site allows private networks. */
@@ -56,46 +58,54 @@ export function privateHost(address: string): boolean {
     || /^(127|10|0)\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host)
 }
 
-interface Session { base: string; token: string; user: string }
+interface Session { type: SourceType; base: string; token: string; user: string }
 export interface ServerInfo { server_name: string; server_id: string; version: string; libraries: { id: string; name: string; type: string }[] }
 
 async function call<T>(base: string, path: string, init?: RequestInit): Promise<T> {
   let res: Response
-  try { res = await fetcher(base + path, init) } catch { throw new SourceError('无法连接 Emby 服务器（网络错误或服务器未开放跨域）', true) }
-  if (res.status === 401) throw new SourceError('Emby 用户名或密码错误')
-  if (!res.ok) throw new SourceError(`Emby 返回 HTTP ${res.status}`, [429, 502, 503, 504].includes(res.status), Number(res.headers.get('Retry-After')) || 0)
+  try { res = await fetcher(base + path, init) } catch { throw new SourceError('无法连接媒体服务器（网络错误或服务器未开放跨域）', true) }
+  if (res.status === 401) throw new SourceError('媒体服务器用户名或密码错误')
+  if (!res.ok) throw new SourceError(`媒体服务器返回 HTTP ${res.status}`, [429, 502, 503, 504].includes(res.status), Number(res.headers.get('Retry-After')) || 0)
   return res.json() as Promise<T>
 }
 
-async function login(url: string, username: string, password: string): Promise<Session> {
-  const base = embyBase(url)
-  if (!username.trim()) throw new SourceError('请填写 Emby 用户名')
+async function login(type: SourceType, url: string, username: string, password: string): Promise<Session> {
+  const base = sourceBase(url, type)
+  if (!username.trim()) throw new SourceError('请填写用户名')
   const auth = await call<{ AccessToken?: string; User?: { Id: string } }>(base, '/Users/AuthenticateByName', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Emby-Authorization': AUTH }, body: JSON.stringify({ Username: username.trim(), Pw: password }),
+    method: 'POST', headers: { 'Content-Type': 'application/json', [type === 'jellyfin' ? 'Authorization' : 'X-Emby-Authorization']: AUTH }, body: JSON.stringify({ Username: username.trim(), Pw: password }),
   })
-  if (!auth.AccessToken || !auth.User) throw new SourceError('Emby 用户名或密码错误')
-  return { base, token: auth.AccessToken, user: auth.User.Id }
+  if (!auth.AccessToken || !auth.User?.Id) throw new SourceError('媒体服务器用户名或密码错误')
+  return { type, base, token: auth.AccessToken, user: auth.User.Id }
 }
 
 /** Signs in and lists the account's video libraries (`/x/web/datasource/test`). */
-export async function probeSource(url: string, username: string, password: string): Promise<ServerInfo> {
-  const s = await login(url, username, password)
+export async function probeSource(type: SourceType, url: string, username: string, password: string): Promise<ServerInfo> {
+  const s = await login(type, url, username, password)
   const info = await call<{ ServerName?: string; Id?: string; Version?: string }>(s.base, '/System/Info/Public')
   return { server_name: info.ServerName ?? '', server_id: info.Id ?? '', version: info.Version ?? '', libraries: await libraries(s) }
 }
 
-async function libraries(s: Session, get: Get = (p) => call(s.base, p)) {
-  const views = await get<{ Items: { Id: string; Name: string; CollectionType?: string }[] }>(`/Users/${s.user}/Views?api_key=${s.token}`)
+function metadata<T>(s: Session, path: string): Promise<T> {
+  return call(s.base, path, { headers: sessionHeaders(s) })
+}
+
+function sessionHeaders(s: Session): Record<string, string> {
+  return s.type === 'jellyfin' ? { Authorization: `${AUTH}, Token=${JSON.stringify(s.token)}` } : { 'X-Emby-Token': s.token }
+}
+
+async function libraries(s: Session, get: Get = (p) => metadata(s, p)) {
+  const views = await get<{ Items: { Id: string; Name: string; CollectionType?: string }[] }>(s.type === 'jellyfin' ? `/UserViews?UserId=${s.user}` : `/Users/${s.user}/Views`)
   return views.Items.filter((v) => VIDEO_LIBRARIES.has(v.CollectionType ?? '')).map((v) => ({ id: v.Id, name: v.Name, type: v.CollectionType ?? 'mixed' }))
 }
 
 /** One signed-in session per source, renewed when the source's credentials change. */
 const sessions = new Map<number, { key: string; session: Promise<Session> }>()
 function sessionFor(ds: DataSource): Promise<Session> {
-  const key = `${ds.url}\n${ds.username}\n${ds.password}`
+  const key = `${ds.type}\n${ds.url}\n${ds.username}\n${ds.password}`
   const cached = sessions.get(ds.id)
   if (cached?.key === key) return cached.session
-  const session = login(ds.url, ds.username, ds.password)
+  const session = login(ds.type, ds.url, ds.username, ds.password)
   session.catch(() => sessions.delete(ds.id))
   sessions.set(ds.id, { key, session })
   return session
@@ -137,7 +147,7 @@ class Throttle {
 function syncGet(s: Session, t: Throttle): Get {
   return async <T,>(path: string): Promise<T> => {
     for (let attempt = 0; ; attempt++) {
-      try { return await t.run(() => call<T>(s.base, path)) } catch (e) {
+      try { return await t.run(() => metadata<T>(s, path)) } catch (e) {
         if (attempt >= 3 || !(e instanceof SourceError) || !e.retry) throw e
         await sleep(Math.min(60, e.retryAfter || 2 ** attempt) * 1000)
       }
@@ -201,16 +211,21 @@ function image(s: Session, item: Item, ...kinds: ('Backdrop' | 'Thumb' | 'Primar
 /** Emby items fetched per page; each page is written before the next one is requested. */
 export const SYNC_PAGE = 100
 
+function itemFields(s: Session) {
+  return s.type === 'jellyfin' ? 'Path,Overview,Genres,DateCreated,MediaSources,MediaStreams' : 'Overview,Genres,PremiereDate,DateCreated,MediaSources,RunTimeTicks'
+}
+
 function listPage(s: Session, get: Get, library: string, start: number, limit: number, keyword = '', ids: string[] = []) {
-  const fields = 'Overview,Genres,PremiereDate,DateCreated,MediaSources,RunTimeTicks'
-  const query = new URLSearchParams({ ParentId: library, Recursive: 'true', IncludeItemTypes: 'Movie,Series,Video,MusicVideo', SortBy: 'SortName', SortOrder: 'Ascending', Fields: fields, StartIndex: String(start), Limit: String(limit), api_key: s.token })
+  const fields = itemFields(s)
+  const query = new URLSearchParams({ ParentId: library, Recursive: 'true', IncludeItemTypes: 'Movie,Series,Video,MusicVideo', SortBy: 'SortName', SortOrder: 'Ascending', Fields: fields, StartIndex: String(start), Limit: String(limit) })
+  if (s.type === 'jellyfin') query.set('UserId', s.user)
   if (keyword) query.set('SearchTerm', keyword)
   if (ids.length) query.set('Ids', ids.join(','))
-  return get<{ Items: Item[]; TotalRecordCount: number }>(`/Users/${s.user}/Items?${query}`)
+  return get<{ Items: Item[]; TotalRecordCount: number }>(`${s.type === 'jellyfin' ? '/Items' : `/Users/${s.user}/Items`}?${query}`)
 }
 
 async function episodes(s: Session, get: Get, series: string): Promise<Item[]> {
-  const page = await get<{ Items: Item[] }>(`/Shows/${series}/Episodes?UserId=${s.user}&Fields=Overview,MediaSources,PremiereDate,DateCreated,RunTimeTicks&api_key=${s.token}`)
+  const page = await get<{ Items: Item[] }>(`/Shows/${series}/Episodes?UserId=${s.user}&Fields=${itemFields(s)}`)
   // Specials (season 0) and virtual (missing) episodes are left out.
   return page.Items.filter((e) => (e.ParentIndexNumber ?? 1) > 0 && e.LocationType !== 'Virtual' && e.MediaSources?.length)
     .sort((a, b) => (a.ParentIndexNumber ?? 1) - (b.ParentIndexNumber ?? 1) || (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0))
@@ -245,7 +260,7 @@ async function mirror(ds: DataSource, s: Session, get: Get, regions: Region[], l
 const itemOf = (media: string) => parseDsRef(media)?.item ?? media
 
 function importLibrary(db: DB, ds: DataSource, library: string) {
-  if (!ds.system && !db.settings.dataSourcePrivateNetwork && privateHost(ds.url)) throw new SourceError('站点不允许使用内网地址的 Emby 服务器')
+  if (!ds.system && !db.settings.dataSourcePrivateNetwork && privateHost(ds.url)) throw new SourceError('站点不允许使用内网地址的媒体服务器')
   const lib = ds.libraries.find(l => l.id === library && l.enabled)
   if (!lib) throw new SourceError('请选择已接入的媒体库')
   return lib
@@ -281,11 +296,16 @@ export async function importSourceDrafts(db: DB, ds: DataSource, library: string
   const ids = [...new Set(input as string[])]
   const s = await sessionFor(ds)
   const get = syncGet(s, new Throttle(Number(db.settings.dataSourceSyncRate) || 5, Number(db.settings.dataSourceSyncConcurrency) || 2))
-  const page = await listPage(s, get, await importLibraryID(s, get, lib), 0, ids.length, '', ids)
+  const libraryID = await importLibraryID(s, get, lib)
+  const page = await listPage(s, get, libraryID, 0, ids.length, '', ids)
   const mirrors: { id: string; value: Mirrored }[] = []
   for (const id of ids) {
     const item = page.Items?.find(item => item.Id === id)
     if (!item || !importable(item)) throw new SourceError('所选视频不存在或没有可用媒体，请刷新列表')
+    if (s.type === 'jellyfin') {
+      const ancestors = await get<{ Id: string }[]>(`/Items/${encodeURIComponent(id)}/Ancestors?UserId=${s.user}`)
+      if (!ancestors.some(parent => parent.Id === libraryID)) throw new SourceError('所选视频不在该媒体库')
+    }
     const value = await mirror(ds, s, get, db.regions, lib, item)
     if (!value) throw new SourceError(`「${item.Name}」没有可用的视频`)
     mirrors.push({ id, value })
@@ -298,9 +318,9 @@ export async function importSourceDrafts(db: DB, ds: DataSource, library: string
     const created = !a
     if (!a) {
       const aid = Math.max(100000, ...db.archives.map(a => a.aid)) + 1
-      a = { aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: Math.floor(Date.now() / 1000), pubdate: 0, state: -20, reason: '', copyright: 2, source: `Emby · ${ds.server_name || ds.name}`,
+      a = { aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: Math.floor(Date.now() / 1000), pubdate: 0, state: -20, reason: '', copyright: 2, source: `${sourceNames[ds.type]} · ${ds.server_name || ds.name}`,
         pages: m.pages.map(p => ({ cid: nextID(), ...p })), chapters: [], subtitles: [], stat: { view: 0, danmaku: 0, reply: 0, favorite: 0, coin: 0, share: 0, like: 0 },
-        origin: { type: 'emby', ds: ds.id, item: id, library: lib.id, locked: [], meta: m.meta } }
+        origin: { type: ds.type, ds: ds.id, item: id, library: lib.id, locked: [], meta: m.meta } }
       db.archives.push(a)
       queueMockDanmaku(db, a)
     }
@@ -367,10 +387,10 @@ export async function syncSource(db: DB, ds: DataSource, nextID: () => number): 
         } else {
           const aid = Math.max(100000, ...db.archives.map((x) => x.aid)) + 1
           const created: Archive = {
-            aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: m.ctime, pubdate: m.pubdate, state: auditRequired ? -1 : 0, reason: '', copyright: 2, source: `Emby · ${ds.server_name || ds.name}`,
+            aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: m.ctime, pubdate: m.pubdate, state: auditRequired ? -1 : 0, reason: '', copyright: 2, source: `${sourceNames[ds.type]} · ${ds.server_name || ds.name}`,
             pages: m.pages.map((p) => ({ cid: nextID(), ...p })), chapters: [], subtitles: [],
             stat: { view: 0, danmaku: 0, reply: 0, favorite: 0, coin: 0, share: 0, like: 0 },
-            origin: { type: 'emby', ds: ds.id, item: item.Id, library: lib.id, locked: [], meta: m.meta },
+            origin: { type: ds.type, ds: ds.id, item: item.Id, library: lib.id, locked: [], meta: m.meta },
           }
           db.archives.push((a = created))
         }
@@ -396,10 +416,10 @@ export async function syncSource(db: DB, ds: DataSource, nextID: () => number): 
 
 /** `complete`: `aids` is the whole library, in order; otherwise they are added (in order) after the videos already in the 合集. */
 function upsertCollection(db: DB, ds: DataSource, s: Session, lib: DataSourceLibrary, aids: number[], nextID: () => number, complete: boolean) {
-  const meta = { title: lib.name.slice(0, 40), intro: `同步自 Emby「${ds.server_name || ds.name}」的媒体库`, cover: `${s.base}/Items/${lib.id}/Images/Primary?maxWidth=1280` }
+  const meta = { title: lib.name.slice(0, 40), intro: `同步自 ${sourceNames[ds.type]}「${ds.server_name || ds.name}」的媒体库`, cover: `${s.base}/Items/${lib.id}/Images/Primary?maxWidth=1280` }
   let c = db.collections.find((x) => x.origin?.ds === ds.id && x.origin.library === lib.id)
   if (!c) {
-    c = { id: nextID(), mid: ds.mid, kind: 'season', ...meta, aids: [], ctime: Math.floor(Date.now() / 1000), origin: { type: 'emby', ds: ds.id, library: lib.id, locked: [], meta } }
+    c = { id: nextID(), mid: ds.mid, kind: 'season', ...meta, aids: [], ctime: Math.floor(Date.now() / 1000), origin: { type: ds.type, ds: ds.id, library: lib.id, locked: [], meta } }
     db.collections.push(c)
   }
   for (const f of ['title', 'intro', 'cover'] as const) if (!c.origin!.locked.includes(f)) c[f] = meta[f]
@@ -429,7 +449,7 @@ export async function dsMediaURL(db: DB, ref: string): Promise<string> {
   const ds = r && db.dataSources.find((x) => x.id === r.ds)
   if (!r || !ds || !sourceMediaReferenced(db, r.ds, r.item, r.source, r.container)) return ''
   const s = await sessionFor(ds)
-  return `${s.base}/Videos/${r.item}/stream.${r.container ?? 'mp4'}?Static=true&MediaSourceId=${encodeURIComponent(r.source)}&DeviceId=${DEVICE}&api_key=${s.token}`
+  return `${s.base}/Videos/${r.item}/stream.${r.container ?? 'mp4'}?Static=true&MediaSourceId=${encodeURIComponent(r.source)}&DeviceId=${DEVICE}&${s.type === 'jellyfin' ? 'ApiKey' : 'api_key'}=${encodeURIComponent(s.token)}`
 }
 
 /** Effective content grants access; a cache or stale video room cannot grant it. */
@@ -454,16 +474,26 @@ export async function dsPlaylist(db: DB, path: string, source: string, dsID: num
   const s = await sessionFor(ds)
   const key = `${dsID}:${item}:${source}`
   if (!playSessions.has(key)) {
-    const p = call<{ PlaySessionId: string }>(s.base, `/Items/${item}/PlaybackInfo?MediaSourceId=${encodeURIComponent(source)}&api_key=${s.token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((d) => d.PlaySessionId)
+    const p = call<{ PlaySessionId: string }>(s.base, `/Items/${item}/PlaybackInfo?MediaSourceId=${encodeURIComponent(source)}`, { method: 'POST', headers: { ...sessionHeaders(s), 'Content-Type': 'application/json' }, body: '{}' }).then((d) => d.PlaySessionId)
     p.catch(() => playSessions.delete(key))
     playSessions.set(key, p)
   }
   // MaxWidth keeps Emby from transcoding 4K sources at full size.
-  const query = `MediaSourceId=${encodeURIComponent(source)}&VideoCodec=h264&AudioCodec=aac&MaxWidth=1920&DeviceId=${DEVICE}&PlaySessionId=${await playSessions.get(key)}&api_key=${s.token}`
-  const text = await fetcher(`${s.base}/Videos/${item}/main.m3u8?${query}`).then((r) => r.text())
+  const query = `MediaSourceId=${encodeURIComponent(source)}&VideoCodec=h264&AudioCodec=aac&MaxWidth=1920&DeviceId=${DEVICE}&PlaySessionId=${await playSessions.get(key)}`
+  const playlist = `${s.base}/Videos/${item}/main.m3u8?${query}`
+  const response = await fetcher(playlist, { headers: sessionHeaders(s) })
+  if (!response.ok) throw new SourceError(`媒体服务器返回 HTTP ${response.status}`)
+  const text = await response.text()
   return text.split('\n').map((line) => {
     const t = line.trim()
-    return !t || t.startsWith('#') ? line : `${s.base}/Videos/${item}/${t.split('?')[0]}?${query}`
+    if (!t || t.startsWith('#')) return line
+    const segment = new URL(t, playlist)
+    if (segment.origin !== new URL(s.base).origin) throw new SourceError('媒体分段地址无效')
+    for (const [key, value] of new URLSearchParams(query)) {
+      if (!segment.searchParams.has(key)) segment.searchParams.set(key, value)
+    }
+    segment.searchParams.set(s.type === 'jellyfin' ? 'ApiKey' : 'api_key', s.token)
+    return segment.href
   }).join('\n')
 }
 
@@ -495,7 +525,7 @@ export async function resolveSourceImage(db: DB, ref: string): Promise<string> {
   if (!stored.includes(ref)) return ''
   const s = await sessionFor(ds)
   const query = new URLSearchParams({ tag: u.searchParams.get('tag') ?? '', maxWidth: '1280' })
-  const response = await fetcher(`${s.base}/Items/${m[1]}/Images/${m[2]}?${query}`, { headers: { 'X-Emby-Token': s.token } })
+  const response = await fetcher(`${s.base}/Items/${m[1]}/Images/${m[2]}?${query}`, { headers: sessionHeaders(s) })
   if (!response.ok || !response.headers.get('Content-Type')?.startsWith('image/')) return ''
   return URL.createObjectURL(await response.blob())
 }

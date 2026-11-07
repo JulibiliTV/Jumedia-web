@@ -27,7 +27,7 @@ export function queueMockDanmaku(db: DB, archive: Archive, cid?: number) {
 
 function hasSource(db: DB, media: string, originDS?: number) {
   const ds = originDS || Number(/^embyds:(\d+):/.exec(media)?.[1])
-  return db.dataSources.some(source => source.id === ds && source.type === 'emby')
+  return db.dataSources.some(source => source.id === ds)
 }
 
 function enqueueMock(db: DB, aid: number, title: string, p: { cid: number; duration: number; part: string }, valid: () => boolean, addCount: (delta: number) => void) {

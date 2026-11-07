@@ -2,7 +2,8 @@ import { formatDuration } from '../api/normalize'
 import { Writer } from '../api/protobuf'
 import { idleSync, requestMockDanmaku } from './dandanplay'
 import { type Archive, type ArchiveField, type Banner, type CollectionField, type DataSource, type DB, type LiveRoom, type StreamSource, type User, av2bv, avatarURL, bv2av, getDB, importDemo, LIVE_CHATTER, nextID, putFile, resetDB, resolveMedia, save, seedDanmaku } from './db'
-import { browseSource, importSourceDrafts, dataSourceJSON, dsHlsPath, dsPlaylist, embyBase, forgetSession, mediaFormat, originJSON, parseDsRef, privateHost, probeSource, purgeSource, setSourceFetcher, SourceError, syncSource } from './datasource'
+import { sourceNames, type SourceType } from '../lib/dataSource'
+import { browseSource, importSourceDrafts, dataSourceJSON, dsHlsPath, dsPlaylist, sourceBase, forgetSession, mediaFormat, originJSON, parseDsRef, privateHost, probeSource, purgeSource, setSourceFetcher, SourceError, syncSource } from './datasource'
 import { parseDemoPackage } from './emby'
 import { cacheDir, cacheJSON, cacheKeyOf, cachePath, ensureCache, findCache, notReady, retryCache, roomCache, tickCaches, TRANSCODE_HEIGHTS } from './liveCache'
 import { liveWindow, parsePlaylist, passthrough, type Playlist, relayMaster } from './hlsRelay'
@@ -1801,39 +1802,42 @@ function ownSource(c: Ctx, optional = false): DataSource | undefined {
 const anySource = (c: Ctx) => c.db.dataSources.find((x) => x.id === int(c.p.id)) ?? fail(-404, '数据源不存在')
 
 /** Address and credentials from the request; an empty password keeps the stored one unless `clear_password`. */
-function credentials(c: Ctx, existing: DataSource | undefined, system: boolean) {
+function credentials(c: Ctx, existing: DataSource | undefined, system: boolean): { type: SourceType; url: string; username: string; password: string } {
+  const type = c.p.type || existing?.type || 'emby'
+  if (type !== 'emby' && type !== 'jellyfin') return fail(-400, '不支持的数据源类型')
+  if (existing && type !== existing.type) return fail(-400, '已保存的数据源不能更改类型')
   const url = (c.p.url ?? '').trim(), username = (c.p.username ?? '').trim()
-  if (!url) fail(-400, '请填写 Emby 服务器地址')
-  if (!username) fail(-400, '请填写 Emby 用户名')
-  try { embyBase(url) } catch (e) { fail(-400, (e as Error).message) }
-  if (!system && !c.db.settings.dataSourcePrivateNetwork && privateHost(url)) fail(-400, '站点不允许使用内网地址的 Emby 服务器')
+  if (!url) fail(-400, `请填写 ${sourceNames[type]} 服务器地址`)
+  if (!username) fail(-400, `请填写 ${sourceNames[type]} 用户名`)
+  try { sourceBase(url, type) } catch (e) { fail(-400, (e as Error).message) }
+  if (!system && !c.db.settings.dataSourcePrivateNetwork && privateHost(url)) fail(-400, '站点不允许使用内网地址的媒体服务器')
   const password = c.p.password ? c.p.password : truthy(c.p.clear_password) ? '' : existing?.password ?? ''
-  return { url, username, password }
+  return { type, url, username, password }
 }
-async function connect(url: string, username: string, password: string) {
-  try { return await probeSource(url, username, password) } catch (e) { return fail(-400, e instanceof SourceError ? e.message : '无法连接 Emby 服务器') }
+async function connect(type: SourceType, url: string, username: string, password: string) {
+  try { return await probeSource(type, url, username, password) } catch (e) { return fail(-400, e instanceof SourceError ? e.message : '无法连接媒体服务器') }
 }
 function testSource(c: Ctx, existing: DataSource | undefined, system: boolean) {
-  const { url, username, password } = credentials(c, existing, existing?.system ?? system)
-  return connect(url, username, password)
+  const { type, url, username, password } = credentials(c, existing, existing?.system ?? system)
+  return connect(type, url, username, password)
 }
 
 async function saveSource(c: Ctx, existing: DataSource | undefined, system: boolean) {
   system = existing?.system ?? system
-  const { url, username, password } = credentials(c, existing, system)
+  const { type, url, username, password } = credentials(c, existing, system)
   if (!existing && !system && c.db.dataSources.filter((x) => x.mid === c.me!.mid && !x.system).length >= MAX_SOURCES) fail(-400, `最多添加 ${MAX_SOURCES} 个数据源`)
   if (existing?.status === 'syncing') fail(-400, '正在同步中，请稍后再修改')
   const mid = existing?.mid ?? (system ? Number(c.db.settings.officialMid) : c.me!.mid)
   if (!userById(mid)) fail(-400, '官方账号不存在，请先在站点设置中配置')
-  const info = await connect(url, username, password)
-  if (c.db.dataSources.some((x) => x !== existing && x.mid === mid && x.system === system && x.server_id === info.server_id && x.username === username)) fail(-400, '已经添加过这个 Emby 账号')
+  const info = await connect(type, url, username, password)
+  if (c.db.dataSources.some((x) => x !== existing && x.mid === mid && x.system === system && x.server_id === info.server_id && x.username === username)) fail(-400, `已经添加过这个 ${sourceNames[type]} 账号`)
   const enabled = c.p.libraries === undefined ? null : new Set(c.p.libraries.split(',').filter(Boolean))
   const libraries = info.libraries.map((l) => {
     const old = existing?.libraries.find((x) => x.id === l.id)
     return { ...l, enabled: enabled ? enabled.has(l.id) : old?.enabled ?? true, items: old?.items ?? 0, collection_id: old?.collection_id ?? 0 }
   })
-  const name = (c.p.name ?? '').trim().slice(0, 30) || info.server_name || 'Emby'
-  const ds: DataSource = existing ?? { id: nextID(), mid, system, type: 'emby', name, url, username, password, server_name: '', server_id: '', libraries: [], auto_sync: true, proxy_playback: true, status: 'idle', message: '', last_sync: 0, ctime: ts() }
+  const name = (c.p.name ?? '').trim().slice(0, 30) || info.server_name || sourceNames[type]
+  const ds: DataSource = existing ?? { id: nextID(), mid, system, type, name, url, username, password, server_name: '', server_id: '', libraries: [], auto_sync: true, proxy_playback: true, status: 'idle', message: '', last_sync: 0, ctime: ts() }
   Object.assign(ds, { name, url, username, password, server_name: info.server_name, server_id: info.server_id, libraries, auto_sync: c.p.auto_sync === undefined ? ds.auto_sync : truthy(c.p.auto_sync), proxy_playback: c.p.proxy_playback === undefined ? ds.proxy_playback ?? true : truthy(c.p.proxy_playback) })
   if (!existing) c.db.dataSources.push(ds)
   forgetSession(ds.id)

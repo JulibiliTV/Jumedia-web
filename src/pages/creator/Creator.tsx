@@ -191,13 +191,13 @@ function UploadForm() {
     return () => { live = false }
   }, [aid, me?.mid])
   const resetOrigin = async () => {
-    if (!origin || !(await confirmDialog(`将${origin.locked.map((f) => FIELD_LABEL[f]).join('、')}恢复为 Emby 中的信息？`, { ok: '恢复' }))) return
+    if (!origin || !(await confirmDialog(`将${origin.locked.map((f) => FIELD_LABEL[f]).join('、')}恢复为源媒体库中的信息？`, { ok: '恢复' }))) return
     try {
       const d = await jm.archiveOriginReset(Number(aid))
       const a = d.data.Archive
       setForm((f) => ({ ...f, title: a.title, tid: a.tid, tag: a.tag, desc: a.desc, cover: a.cover }))
       setOrigin(d.data.origin)
-      toast('已恢复 Emby 元信息', 'success')
+      toast('已恢复媒体库元信息', 'success')
     } catch (e) { toastError(e) }
   }
 
@@ -271,7 +271,7 @@ function UploadForm() {
             {origin ? <span className="log-tag">数据源：<strong>{origin.datasource_name}{origin.library && ` > ${origin.library}`}</strong></span>
               : <button type="button" className="sm-btn" onClick={() => fileInput.current?.click()}><Icon name="plus" size={14} />添加分 P</button>}
           </div>
-          {origin?.missing && <div className="ds-err">该视频已不在 Emby 媒体库中（或所在媒体库已停用），当前不会对外显示。</div>}
+          {origin?.missing && <div className="ds-err">该视频已不在源媒体库中（或所在媒体库已停用），当前不会对外显示。</div>}
           {!parts.length && !origin && (
             <div className={`up-drop ${over ? 'over' : ''}`} onClick={() => fileInput.current?.click()} onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}>
               <Icon name="upload" size={32} style={{ color: 'var(--brand)' }} /><b>拖拽视频到这里，或点击选择文件</b><span>可一次选择多个文件，每个文件是一个分 P</span>
@@ -299,7 +299,7 @@ function UploadForm() {
               </div>
             )
           })}
-          {origin && origin.locked.length > 0 && <div className="row between wrap" style={{ fontSize: 13 }}><span>已在 Jumedia 中修改：{origin.locked.map((f) => FIELD_LABEL[f]).join('、')}</span><button type="button" className="sm-btn" onClick={resetOrigin}><Icon name="refresh" size={14} />恢复 Emby 元信息</button></div>}
+          {origin && origin.locked.length > 0 && <div className="row between wrap" style={{ fontSize: 13 }}><span>已在 Jumedia 中修改：{origin.locked.map((f) => FIELD_LABEL[f]).join('、')}</span><button type="button" className="sm-btn" onClick={resetOrigin}><Icon name="refresh" size={14} />恢复媒体库元信息</button></div>}
           <input ref={fileInput} type="file" accept="video/*" multiple hidden onChange={(e) => e.target.files && addFiles(e.target.files)} />
         </section>
 
@@ -431,7 +431,7 @@ export function Archives() {
                 <Link to={a.state === 0 ? `/video/${a.bvid}` : `/creator/upload/${a.aid}`} className="art"><img src={a.cover} alt="" /><span>{formatDuration(a.duration)}</span></Link>
                 <div className="info">
                   <span className="row" style={{ gap: 8, minWidth: 0 }}><span className="st" style={{ background: tone[0], color: tone[1] }}>{a.state_desc}</span><Link to={a.state === 0 ? `/video/${a.bvid}` : `/creator/upload/${a.aid}`} className="t">{a.title}</Link></span>
-                  <span className="meta">{a.tname} · {o ? <>Emby · {o.datasource_name}{o.library && ` · ${o.library}`}{o.locked.length > 0 && ` · 已修改${o.locked.map((f: string) => FIELD_LABEL[f]).join('、')}`}</> : <>{a.copyright === 1 ? '自制' : '转载'} · {a.state === -20 ? `草稿 · ${dateTimeText(a.ctime)} 创建` : a.state === -40 || (a.state === -1 && a.dtime) ? `将于 ${dateTimeText(a.dtime)} 发布` : `投稿于 ${dateTimeText(a.ctime)}`}</>}</span>
+                  <span className="meta">{a.tname} · {o ? <>{o.datasource_name}{o.library && ` · ${o.library}`}{o.locked.length > 0 && ` · 已修改${o.locked.map((f: string) => FIELD_LABEL[f]).join('、')}`}</> : <>{a.copyright === 1 ? '自制' : '转载'} · {a.state === -20 ? `草稿 · ${dateTimeText(a.ctime)} 创建` : a.state === -40 || (a.state === -1 && a.dtime) ? `将于 ${dateTimeText(a.dtime)} 发布` : `投稿于 ${dateTimeText(a.ctime)}`}</>}</span>
                   {a.state === -2 && <span style={{ fontSize: 12, color: '#c43f3b' }}>退回原因：{a.reject_reason}</span>}
                   <span className="nums"><span>播放 {countText(stat.view)}</span><span>弹幕 {countText(stat.danmaku)}</span><span>点赞 {countText(stat.like)}</span><span>收藏 {countText(stat.favorite)}</span><span>评论 {countText(stat.reply)}</span></span>
                 </div>
@@ -479,7 +479,7 @@ export function Collections() {
         <div className="g3">
           {shown.map((s: any) => (
             <div key={s.id} className="set-card">
-              <div className="art"><img src={s.cover} alt="" /><span className="kind" style={{ background: s.origin ? '#19a865' : s.kind === 'season' ? 'var(--brand)' : '#8b6cf6' }}>{s.origin ? 'Emby 媒体库' : s.kind === 'season' ? '合集' : '系列'}</span><span className="n"><b>{s.ep_count}</b><span>个视频</span></span></div>
+              <div className="art"><img src={s.cover} alt="" /><span className="kind" style={{ background: s.origin ? '#19a865' : s.kind === 'season' ? 'var(--brand)' : '#8b6cf6' }}>{s.origin ? '媒体库' : s.kind === 'season' ? '合集' : '系列'}</span><span className="n"><b>{s.ep_count}</b><span>个视频</span></span></div>
               <span className="stack" style={{ padding: '0 4px', gap: 2 }}>
                 <b className="clamp-1" style={{ fontSize: 15 }}>{s.title}</b>
                 <span className="muted clamp-1" style={{ fontSize: 13 }}>{s.intro || (s.origin ? `${s.origin.datasource_name} · ${s.origin.library}` : '暂无简介')}</span>
@@ -498,7 +498,7 @@ export function Collections() {
           <form className="stack" onSubmit={save}>
             <div className="field"><label>名称</label><input className="input" value={edit.title} maxLength={40} onChange={(e) => setEdit({ ...edit, title: e.target.value })} required /></div>
             <div className="field"><label>简介</label><textarea className="textarea" value={edit.intro} onChange={(e) => setEdit({ ...edit, intro: e.target.value })} /></div>
-            {edit.library !== undefined ? <p className="faint" style={{ fontSize: 13, margin: 0 }}>这个合集对应 Emby 媒体库「{edit.library}」，其中的视频随数据源同步。名称与简介的修改只保存在 Jumedia。</p> : <div className="field"><label>包含视频（按勾选顺序排列）</label>
+            {edit.library !== undefined ? <p className="faint" style={{ fontSize: 13, margin: 0 }}>这个合集对应媒体库「{edit.library}」，其中的视频随数据源同步。名称与简介的修改只保存在 Jumedia。</p> : <div className="field"><label>包含视频（按勾选顺序排列）</label>
               <div style={{ maxHeight: 280, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 10, padding: 6 }}>
                 {arcs.map((a) => <label key={a.aid} className="check" style={{ display: 'flex', padding: '6px 8px' }}><input type="checkbox" checked={edit.aids.includes(a.aid)} onChange={(e) => setEdit({ ...edit, aids: e.target.checked ? [...edit.aids, a.aid] : edit.aids.filter((x) => x !== a.aid) })} /><img src={a.cover} alt="" style={{ width: 64, borderRadius: 6, aspectRatio: '16/10', objectFit: 'cover' }} /><span className="clamp-1">{a.title}</span>{edit.aids.includes(a.aid) && <span className="badge brand" style={{ marginLeft: 'auto' }}>{edit.aids.indexOf(a.aid) + 1}</span>}</label>)}
                 {!arcs.length && <p className="faint" style={{ padding: 12 }}>还没有已通过的稿件</p>}
@@ -621,7 +621,7 @@ function Reservations() {
   )
 }
 
-/** 数据源 — the creator's Emby sources; each enabled library becomes a 合集 in their space. */
+/** 数据源 — the creator's media sources; each enabled library becomes a 合集 in their space. */
 export function DataSources() {
   useTitle('数据源')
   const d = useAsync(() => jm.dataSources(), [])
@@ -636,7 +636,7 @@ export function DataSources() {
     <div className="row wrap" style={{ gap: 20, alignItems: 'flex-start' }}>
       <div className="stack" style={{ flex: '999 1 480px', minWidth: 0, gap: 16 }}>
         <div className="chead">
-          <div><h1>数据源</h1><p>以只读方式接入 Emby，手动选择电影、剧集导入草稿，也可自动同步整个媒体库</p></div>
+          <div><h1>数据源</h1><p>以只读方式接入 Emby 或 Jellyfin，手动选择电影、剧集导入草稿，也可自动同步整个媒体库</p></div>
         </div>
         {!d.data.enabled && <div className="ds-card muted">站点暂未开放个人数据源，已添加的数据源仍会显示，但无法新增或同步。</div>}
         {list?.map((ds) => edit !== 'new' && edit?.id === ds.id
@@ -650,9 +650,9 @@ export function DataSources() {
         <section className="ds-card muted" style={{ gap: 12, padding: 16, fontSize: 13, lineHeight: 1.7 }}>
           <b style={{ fontSize: 15, color: 'var(--text)' }}>接入后会怎样</b>
           <span>· 手动获取创建草稿，整库同步会创建合集</span>
-          <span>· 片名、简介、海报取自 Emby 元信息</span>
+          <span>· 片名、简介、海报取自源媒体库</span>
           <span>· 草稿由你投稿，整库同步按站点规则审核</span>
-          <span>· 在 Jumedia 修改的标题不会写回 Emby</span>
+          <span>· 标题修改仅保存在 Jumedia</span>
           <span>· 只接入登录用户能看到的媒体库</span>
           <span>· 移除数据源会同时下架它的全部视频</span>
           {d.data.sync_hours > 0 && <span>· 开启自动同步时每 {d.data.sync_hours} 小时同步一次</span>}

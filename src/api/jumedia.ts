@@ -1,3 +1,4 @@
+import type { SourceType } from '../lib/dataSource'
 import { csrf, data, envelope, post } from './client'
 
 /**
@@ -48,7 +49,7 @@ export type ArchiveForm = {
 }
 export const archiveSubmit = (f: ArchiveForm) => post('api', f.aid ? '/x/vu/web/edit' : '/x/vu/web/add/v3', { ...csrf(), ...f, videos: JSON.stringify(f.videos), chapters: JSON.stringify(f.chapters ?? []) })
 export const creatorArchives = (p: { pn: number; ps?: number; status?: string; keyword?: string; origin?: '' | 'upload' | 'datasource' }) => data('api', '/x/web/archives', { ps: 10, ...p })
-/** Restores Emby metadata on a data-source archive (all locked fields when `fields` is omitted). */
+/** Restores upstream metadata on a data-source archive (all locked fields when `fields` is omitted). */
 export const archiveOriginReset = (aid: number, fields?: string[]) => post('api', '/x/web/archive/origin/reset', { ...csrf(), aid, fields: fields?.join(',') })
 export const creatorArchive = (aid: number) => data('api', '/x/web/archive/view', { aid })
 export const archiveDelete = (aid: number) => post('api', '/x/web/archive/delete', { ...csrf(), aid })
@@ -116,8 +117,8 @@ export const medalTakeOff = () => post('live', '/xlive/web-room/v1/fansMedal/tak
 /** Jumedia: free 粉丝团 join. */
 export const medalJoin = (roomid: number) => post('live', '/xlive/web-room/v1/fansMedal/join', { ...csrf(), roomid })
 
-// ---------- 数据源（Emby，只读） ----------
-export type DataSourceForm = { id?: number; name: string; url: string; username: string; password: string; clear_password?: boolean; libraries?: string; auto_sync: boolean; proxy_playback: boolean; sync_now?: boolean }
+// ---------- 数据源（只读） ----------
+export type DataSourceForm = { type: SourceType; id?: number; name: string; url: string; username: string; password: string; clear_password?: boolean; libraries?: string; auto_sync: boolean; proxy_playback: boolean; sync_now?: boolean }
 export interface SourceVideo { id: string; title: string; type: string; pic: string; importable: boolean; archive: { aid: number; state: number } | null }
 export interface SourceDraft { aid: number; bvid: string; state: number; created: boolean }
 export const dataSourceItems = (p: { id: number; library: string; keyword?: string; pn: number; ps: number }): Promise<{ list: SourceVideo[]; page: { pn: number; ps: number; total: number } }> => data('api', '/x/web/datasource/items', p)

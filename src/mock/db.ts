@@ -1,4 +1,5 @@
 import { dsMediaURL, resolveSourceImage } from './datasource'
+import type { SourceType } from '../lib/dataSource'
 import { type Catalog, type CatalogImages, type CatalogSeries, embyHlsPath, embyRef, getCatalog, setDemoPackage, type DemoPackage } from './emby'
 
 /**
@@ -36,10 +37,10 @@ export interface Archive {
  * edited in Jumedia and keep their Jumedia value on later syncs. Emby itself is
  * never written to.
  */
-export interface ArchiveOrigin { type: 'emby'; ds: number; item: string; library: string; locked: ArchiveField[]; meta: ArchiveMeta }
+export interface ArchiveOrigin { type: SourceType; ds: number; item: string; library: string; locked: ArchiveField[]; meta: ArchiveMeta }
 export interface ArchiveMeta { title: string; desc: string; tid: number; tag: string; pic: string }
 export type ArchiveField = keyof ArchiveMeta
-export interface CollectionOrigin { type: 'emby'; ds: number; library: string; locked: CollectionField[]; meta: Record<CollectionField, string> }
+export interface CollectionOrigin { type: SourceType; ds: number; library: string; locked: CollectionField[]; meta: Record<CollectionField, string> }
 export type CollectionField = 'title' | 'intro' | 'cover'
 export interface Collection { id: number; mid: number; kind: 'season' | 'series'; title: string; intro: string; cover: string; aids: number[]; ctime: number; origin?: CollectionOrigin }
 
@@ -51,7 +52,7 @@ export interface DataSourceLibrary { id: string; name: string; type: string; ena
  * `has_password`, never the password, and the Emby token lives only in memory.
  */
 export interface DataSource {
-  id: number; mid: number; system: boolean; type: 'emby'; name: string; url: string; username: string; password: string
+  id: number; mid: number; system: boolean; type: SourceType; name: string; url: string; username: string; password: string
   server_name: string; server_id: string; libraries: DataSourceLibrary[]; auto_sync: boolean; proxy_playback: boolean
   status: 'idle' | 'syncing' | 'ok' | 'error'; message: string; last_sync: number; ctime: number
 }

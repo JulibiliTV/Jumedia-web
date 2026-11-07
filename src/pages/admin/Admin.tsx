@@ -63,7 +63,7 @@ export function AdminLayout() {
     '/admin/archives': n ? `共 ${n.archives} 个已发布稿件 · ${n.pending} 个待审核` : '',
     '/admin/bangumi': n ? `${n.seasons} 部 · ${n.episodes} 集` : '',
     '/admin/live': n ? `${n.rooms} 个直播间 · ${n.live_now} 个直播中` : '',
-    '/admin/datasources': '以只读方式接入 Emby，媒体库中的内容成为站内视频',
+    '/admin/datasources': '以只读方式接入 Emby 或 Jellyfin，媒体库中的内容成为站内视频',
     '/admin/users': n ? `共 ${n.users} 个用户 · ${n.banned} 个已封禁` : '',
     '/admin/moderation': n ? `今日新增评论 ${countText(n.reply_today ?? 0)} 条 · 弹幕 ${countText(n.danmaku_today ?? 0)} 条` : '',
     '/admin/regions': '分区用于投稿分类、频道页与排行榜；隐藏后不在前台展示。拖动左侧把手调整顺序。',
@@ -228,7 +228,7 @@ export function Audit() {
       </div>
       {item && (
         <div className="panel audit-preview stack">
-          <AuditMedia key={item.aid} aid={item.aid} pages={item.pages ?? []} emby={item.origin?.type === 'emby'} />
+          <AuditMedia key={item.aid} aid={item.aid} pages={item.pages ?? []} synced={!!item.origin} />
           <h2 style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.4 }}>{item.title}</h2>
           <div className="row wrap" style={{ fontSize: 13 }}><span className="badge">{item.tname}</span><span className="badge">{item.copyright === 1 ? '自制' : '转载'}</span>{item.tag.split(',').filter(Boolean).map((t: string) => <span key={t} className="badge brand">{t}</span>)}</div>
           <p className="muted" style={{ whiteSpace: 'pre-wrap', fontSize: 13.5 }}>{item.desc || '（无简介）'}</p>
@@ -719,12 +719,12 @@ export function SiteSettings() {
       <div className="panel set-sec">
         <div className="panel-title"><h3>数据源</h3></div>
         <div className="stack">
-          <label className="row between"><div><b>允许用户接入数据源</b><div className="faint" style={{ fontSize: 13 }}>用户可在创作中心以只读方式接入自己的 Emby，内容归属该用户</div></div><Switch on={f.userDataSources} onChange={(v) => setF({ ...f, userDataSources: v })} /></label>
-          <label className="row between"><div><b>允许内网地址</b><div className="faint" style={{ fontSize: 13 }}>允许用户填写 localhost、192.168.x.x 等内网 Emby 地址（服务端会代为访问）；系统数据源不受限制</div></div><Switch on={f.dataSourcePrivateNetwork} onChange={(v) => setF({ ...f, dataSourcePrivateNetwork: v })} /></label>
+          <label className="row between"><div><b>允许用户接入数据源</b><div className="faint" style={{ fontSize: 13 }}>用户可在创作中心以只读方式接入自己的媒体库，内容归属该用户</div></div><Switch on={f.userDataSources} onChange={(v) => setF({ ...f, userDataSources: v })} /></label>
+          <label className="row between"><div><b>允许内网地址</b><div className="faint" style={{ fontSize: 13 }}>允许用户填写 localhost、192.168.x.x 等内网媒体服务器地址（服务端会代为访问）；系统数据源不受限制</div></div><Switch on={f.dataSourcePrivateNetwork} onChange={(v) => setF({ ...f, dataSourcePrivateNetwork: v })} /></label>
           <div className="form-grid">
             <div className="field"><label>自动同步间隔（小时）</label><input className="input" type="number" min={0} value={f.dataSourceSyncHours} onChange={(e) => setF({ ...f, dataSourceSyncHours: +e.target.value })} /><span className="hint">0 表示只手动同步</span></div>
             <div className="field"><label>官方账号 UID</label><input className="input" type="number" min={1} value={f.officialMid} onChange={(e) => setF({ ...f, officialMid: +e.target.value })} /><span className="hint">系统数据源的内容显示在该账号下</span></div>
-            <div className="field"><label>同步时每秒请求数</label><input className="input" type="number" min={1} max={50} value={f.dataSourceSyncRate} onChange={(e) => setF({ ...f, dataSourceSyncRate: +e.target.value })} /><span className="hint">每个数据源单独计算，避免同步时请求过多压垮 Emby；播放不受限制</span></div>
+            <div className="field"><label>同步时每秒请求数</label><input className="input" type="number" min={1} max={50} value={f.dataSourceSyncRate} onChange={(e) => setF({ ...f, dataSourceSyncRate: +e.target.value })} /><span className="hint">每个数据源单独计算，避免同步时请求过多压垮媒体服务器；播放不受限制</span></div>
             <div className="field"><label>同步并发请求数</label><input className="input" type="number" min={1} max={8} value={f.dataSourceSyncConcurrency} onChange={(e) => setF({ ...f, dataSourceSyncConcurrency: +e.target.value })} /><span className="hint">每个数据源同时进行的请求上限</span></div>
           </div>
         </div>
@@ -732,14 +732,14 @@ export function SiteSettings() {
       <div className="panel set-sec">
         <div className="panel-title"><h3>弹弹play 弹幕</h3></div>
         <div className="stack">
-          <label className="row between"><div><b>同步 Emby 视频弹幕</b><div className="faint" style={{ fontSize: 13 }}>媒体资源同步后，后台按分集匹配并获取弹幕，可在稿件审核中预览</div></div><Switch label="同步 Emby 视频弹幕" on={f.dandanplayEnabled ?? false} onChange={(v) => setF({ ...f, dandanplayEnabled: v })} /></label>
+          <label className="row between"><div><b>同步 数据源视频弹幕</b><div className="faint" style={{ fontSize: 13 }}>媒体资源同步后，后台按分集匹配并获取弹幕，可在稿件审核中预览</div></div><Switch label="同步 数据源视频弹幕" on={f.dandanplayEnabled ?? false} onChange={(v) => setF({ ...f, dandanplayEnabled: v })} /></label>
           <div className="form-grid">
             <label className="field span-2">接口地址<input className="input mono" type="url" value={f.dandanplayApi ?? 'https://api.dandanplay.net'} onChange={(e) => setF({ ...f, dandanplayApi: e.target.value })} /><span className="hint">支持自部署服务，可包含 token 路径或以 /api/v2 结尾</span></label>
             <label className="field">App ID（可选）<input className="input mono" value={f.dandanplayAppId ?? ''} autoComplete="off" onChange={(e) => setF({ ...f, dandanplayAppId: e.target.value })} /></label>
             <label className="field">App Secret（可选）<input className="input mono" type="password" value={f.dandanplayAppSecret ?? ''} autoComplete="new-password" placeholder={f.dandanplayHasSecret ? '已设置，留空保持不变' : '无需签名的服务可留空'} onChange={(e) => setF({ ...f, dandanplayAppSecret: e.target.value })} /></label>
           </div>
           {f.dandanplayHasSecret && <label className="row"><input type="checkbox" checked={f.dandanplaySecretClear ?? false} onChange={(e) => setF({ ...f, dandanplaySecretClear: e.target.checked })} />清除已保存的 App Secret</label>}
-          <p className="faint" style={{ fontSize: 13 }}>无需签名的服务只需填写地址；需要签名时同时填写 App ID 和 App Secret。启用后，播放 Emby 视频时会自动获取并合并弹幕。</p>
+          <p className="faint" style={{ fontSize: 13 }}>无需签名的服务只需填写地址；需要签名时同时填写 App ID 和 App Secret。启用后，播放 数据源视频时会自动获取并合并弹幕。</p>
         </div>
       </div>
       <div className="panel set-sec">
@@ -754,7 +754,7 @@ export function SiteSettings() {
       <div className="panel set-sec">
         <div className="panel-title"><h3>图片缓存</h3></div>
         <div className="stack">
-          <label className="row between"><div><b>本地缓存数据源图片</b><div className="faint" style={{ fontSize: 13 }}>数据源的封面、背景图第一次取自 Emby 后保存在服务器上，之后直接读本地文件，减少对 Emby 的请求；关闭后每次回源</div></div><Switch on={f.imageCacheEnabled} onChange={(v) => setF({ ...f, imageCacheEnabled: v })} /></label>
+          <label className="row between"><div><b>本地缓存数据源图片</b><div className="faint" style={{ fontSize: 13 }}>数据源的封面、背景图第一次取自源站后保存在服务器上，之后直接读本地文件，减少对源站的请求；关闭后每次回源</div></div><Switch on={f.imageCacheEnabled} onChange={(v) => setF({ ...f, imageCacheEnabled: v })} /></label>
           <div className="form-grid">
             <div className="field span-2"><label>缓存目录</label><input className="input mono" value={f.imageCacheDir} placeholder="留空使用数据目录下的 image-cache" onChange={(e) => setF({ ...f, imageCacheDir: e.target.value })} /><span className="hint">服务器上的绝对路径，需可写。修改后新的图片写入新目录，旧目录中的文件不会自动删除。</span></div>
             <div className="field"><label>容量上限（MB）</label><input className="input" type="number" min={64} value={f.imageCacheMaxMB} onChange={(e) => setF({ ...f, imageCacheMaxMB: +e.target.value })} /><span className="hint">超出后优先删除最久未访问的图片</span></div>
@@ -890,7 +890,7 @@ function ImageCacheUsage() {
   if (!d.data) return null
   const mb = (n: number) => (n / 1024 ** 2).toFixed(1)
   const clear = async () => {
-    if (!(await confirmDialog('清空图片缓存？之后的图片会重新从 Emby 获取。', { danger: true, ok: '清空' }))) return
+    if (!(await confirmDialog('清空图片缓存？之后的图片会重新从源站获取。', { danger: true, ok: '清空' }))) return
     setBusy(true)
     try { const r = await admin.imageCacheClear(); toast(`已清空 ${r.files} 个文件（${mb(r.bytes)} MB）`, 'success'); d.reload() } catch (e) { toastError(e) } finally { setBusy(false) }
   }

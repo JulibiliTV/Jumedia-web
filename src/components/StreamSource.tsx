@@ -106,7 +106,7 @@ function VideoPicker({ videos, current, value, onPick }: { videos: VideoList; cu
       <form className="row" onSubmit={(e) => { e.preventDefault(); setQ(kw); setPn(1) }}><input className="input sm grow" value={kw} placeholder="搜索视频" onChange={(e) => setKw(e.target.value)} /><button className="btn sm">搜索</button></form>
       <div style={{ maxHeight: 320, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 10, padding: 6, marginTop: 6 }}>
         {d.loading && !d.data ? <div style={{ padding: 16, textAlign: 'center' }}><Spinner size={18} /></div> : !d.data?.list.length ? (
-          <p className="faint" style={{ padding: 12, margin: 0, fontSize: 13 }}>没有可转播的视频。在创作中心的「数据源」中接入 Emby 后，媒体库中的视频可在这里选择。</p>
+          <p className="faint" style={{ padding: 12, margin: 0, fontSize: 13 }}>没有可转播的视频。在创作中心的「数据源」中接入媒体库后，媒体库中的视频可在这里选择。</p>
         ) : d.data.list.map((a) => (
           <div key={a.aid}>
             <button type="button" className="row" style={{ width: '100%', padding: '6px 8px', gap: 10, background: value.aid === a.aid ? 'var(--brand-soft)' : 'transparent', border: 0, borderRadius: 8, textAlign: 'left', cursor: 'pointer', color: 'inherit' }}

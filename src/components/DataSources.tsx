@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { type DataSourceForm, dataSourceAPI } from '../api/jumedia'
+import { sourceNames, type SourceType } from '../lib/dataSource'
 import { dateTimeText } from '../api/normalize'
 import { DataSourceImport } from './DataSourceImport'
 import { Icon } from './Icon'
@@ -8,7 +9,7 @@ import { Avatar, confirmDialog, Empty, Modal, Spinner, Switch, toast, toastError
 
 export interface Library { id: string; name: string; type: string; enabled: boolean; items: number; collection_id: number }
 export interface DataSource {
-  id: number; mid: number; system: boolean; type: 'emby'; name: string; url: string; username: string; has_password: boolean; server_name: string
+  id: number; mid: number; system: boolean; type: SourceType; name: string; url: string; username: string; has_password: boolean; server_name: string
   libraries: Library[]; auto_sync: boolean; proxy_playback: boolean; status: 'idle' | 'syncing' | 'ok' | 'error'; message: string; last_sync: number; ctime: number; archives: number
   owner: { mid: number; name: string; face: string }
 }
@@ -33,7 +34,7 @@ export function DataSourceCard({ ds, scope, onChanged, onEdit, showOwner }: { ds
   const [importing, setImporting] = useState(false)
   const sync = async () => { setBusy(true); try { await api.sync(ds.id); onChanged() } catch (e) { toastError(e) } finally { setBusy(false) } }
   const remove = async () => {
-    if (!(await confirmDialog(`删除数据源“${ds.name}”？从它导入的 ${ds.archives} 个视频与媒体库合集会一并从 Jumedia 移除（不会影响 Emby）。`, { danger: true, ok: '删除' }))) return
+    if (!(await confirmDialog(`删除数据源“${ds.name}”？从它导入的 ${ds.archives} 个视频与媒体库合集会一并从 Jumedia 移除（源媒体库将保留）。`, { danger: true, ok: '删除' }))) return
     try { await api.remove(ds.id); toast('已删除', 'success'); onChanged() } catch (e) { toastError(e) }
   }
   const [kind, label] = STATUS[ds.status]
@@ -49,12 +50,12 @@ export function DataSourceCard({ ds, scope, onChanged, onEdit, showOwner }: { ds
             <span className="clamp-1" title={ds.name} style={{ minWidth: 0, maxWidth: '100%' }}>{ds.name}</span>
             <span className="row wrap" style={{ gap: 8 }}>
               <span className="ds-state" style={{ background: tone[0], color: tone[1], whiteSpace: 'nowrap' }}>{ds.status === 'syncing' && <Spinner size={10} />}{label}</span>
-              <span className="ds-state" style={{ background: ds.proxy_playback !== false ? 'var(--success-soft)' : 'var(--surface-2)', color: ds.proxy_playback !== false ? 'var(--success)' : 'var(--text-2)', whiteSpace: 'nowrap' }}>{ds.proxy_playback !== false ? '代理已开启' : '代理已关闭 · Emby 直连'}</span>
+              <span className="ds-state" style={{ background: ds.proxy_playback !== false ? 'var(--success-soft)' : 'var(--surface-2)', color: ds.proxy_playback !== false ? 'var(--success)' : 'var(--text-2)', whiteSpace: 'nowrap' }}>{ds.proxy_playback !== false ? '代理已开启' : `代理已关闭 · ${sourceNames[ds.type]} 直连`}</span>
               {ds.system && <span className="ds-state" style={{ background: 'var(--brand-soft)', color: 'var(--brand)', whiteSpace: 'nowrap' }}>系统</span>}
             </span>
           </span>
           <span className="mono faint clamp-1" style={{ fontSize: 12 }}>{ds.url}{ds.server_name && ` · ${ds.server_name}`}</span>
-          <span className="row muted" style={{ gap: 6, fontSize: 12 }}><Icon name="user" size={13} />账号密码登录 · {ds.username}</span>
+          <span className="row muted" style={{ gap: 6, fontSize: 12 }}><Icon name="user" size={13} />{sourceNames[ds.type]} · {ds.username}</span>
         </span>
       </div>
       {showOwner && <div className="row muted" style={{ fontSize: 13 }}><Avatar src={ds.owner.face} size={20} />{ds.system ? '内容显示在官方账号' : '归属'}「<Link to={`/space/${ds.owner.mid}`}>{ds.owner.name}</Link>」下</div>}
@@ -86,7 +87,7 @@ type Probe = { server_name: string; version: string; libraries: { id: string; na
 /** Add / edit form: connect first (lists libraries), then pick which libraries to mirror. */
 export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage }: { scope: 'web' | 'admin'; value?: DataSource; onClose: () => void; onSaved: () => void; inline?: boolean; usage?: string }) {
   const api = dataSourceAPI(scope)
-  const [f, setF] = useState<DataSourceForm>({ id: value?.id, name: value?.name ?? '', url: value?.url ?? '', username: value?.username ?? '', password: '', auto_sync: value?.auto_sync ?? true, proxy_playback: value?.proxy_playback ?? true })
+  const [f, setF] = useState<DataSourceForm>({ type: value?.type ?? 'emby', id: value?.id, name: value?.name ?? '', url: value?.url ?? '', username: value?.username ?? '', password: '', auto_sync: value?.auto_sync ?? true, proxy_playback: value?.proxy_playback ?? true })
   const [clear, setClear] = useState(false)
   const [probe, setProbe] = useState<Probe | null>(value ? { server_name: value.server_name, version: '', libraries: value.libraries } : null)
   const [picked, setPicked] = useState<Set<string>>(new Set(value ? value.libraries.filter((l) => l.enabled).map((l) => l.id) : []))
@@ -113,15 +114,16 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
   }
   const body = (
     <form className="stack" style={{ gap: 16 }} onSubmit={save}>
+      <label className="stack" style={{ gap: 6 }}><span className="lbl">数据源类型</span><select className="select" value={f.type} disabled={!!value || checking || busy} onChange={(e) => { edit({ type: e.target.value as SourceType }); setProbe(null); setPicked(new Set()); setError('') }}>{Object.entries(sourceNames).map(([type, name]) => <option key={type} value={type}>{name}</option>)}</select></label>
       <label className="stack" style={{ gap: 6 }}><span className="lbl">名称</span><span className="inp"><input value={f.name} maxLength={30} placeholder="默认使用服务器名称" onChange={(e) => edit({ name: e.target.value })} /></span></label>
-      <label className="stack" style={{ gap: 6 }}><span className="lbl">服务器地址</span><span className="inp"><input className="mono" style={{ fontSize: 13 }} value={f.url} placeholder="https://emby.example.com" onChange={(e) => { edit({ url: e.target.value }); setProbe(null) }} required /></span></label>
+      <label className="stack" style={{ gap: 6 }}><span className="lbl">服务器地址</span><span className="inp"><input className="mono" style={{ fontSize: 13 }} value={f.url} placeholder={`https://${f.type}.example.com`} onChange={(e) => { edit({ url: e.target.value }); setProbe(null) }} required /></span></label>
       <div className="f2" style={{ gap: 16 }}>
         <label className="stack" style={{ gap: 6 }}><span className="lbl">用户名</span><span className="inp"><input value={f.username} autoComplete="off" onChange={(e) => { edit({ username: e.target.value }); setProbe(null) }} required /></span></label>
         <label className="stack" style={{ gap: 6 }}><span className="lbl">密码</span><span className="inp"><input type="password" value={f.password} autoComplete="new-password" placeholder={value?.has_password ? '已保存，留空则不修改' : '没有密码可留空'} onChange={(e) => { edit({ password: e.target.value }); setProbe(null) }} /></span>
           {value?.has_password && !f.password && <label className="check" style={{ fontSize: 12.5 }}><input type="checkbox" checked={clear} onChange={(e) => { setClear(e.target.checked); setProbe(null) }} />清除已保存的密码</label>}
         </label>
       </div>
-      <span className="faint" style={{ marginTop: -6, fontSize: 12 }}>用 Emby 用户登录，只接入该用户有权访问的媒体库。Jumedia 只读取媒体库，不会修改你的 Emby。</span>
+      <span className="faint" style={{ marginTop: -6, fontSize: 12 }}>使用 {sourceNames[f.type]} 账号登录，以只读方式接入该账号可访问的媒体库。</span>
       {error && <div className="ds-err">{error}</div>}
       {probe && !error && <div className="ds-ok"><Icon name="check" size={16} />连接成功，发现 {probe.libraries.length} 个媒体库{probe.server_name && ` · ${probe.server_name}${probe.version ? ` ${probe.version}` : ''}`}</div>}
       {probe && (
@@ -141,8 +143,8 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
       )}
       <div className="stack" style={{ gap: 6 }}>
         <label className="check"><input type="checkbox" checked={f.proxy_playback} onChange={(e) => edit({ proxy_playback: e.target.checked })} />通过 Jumedia 代理播放</label>
-        <div className="muted" style={{ fontSize: 13 }}>{f.proxy_playback ? '视频流量经过 Jumedia 服务端。' : '播放器直接访问 Emby，视频流量不经过 Jumedia；播放链接会包含该 Emby 账号的访问令牌。'}</div>
-        {import.meta.env.VITE_MOCK !== '0' && <div className="muted" style={{ fontSize: 13 }}>浏览器演示模式始终直连 Emby，代理播放需要使用 Jumedia 服务端。</div>}
+        <div className="muted" style={{ fontSize: 13 }}>{f.proxy_playback ? '视频流量经过 Jumedia 服务端。' : `播放器直接访问 ${sourceNames[f.type]}。播放链接会包含该账号的访问令牌。`}</div>
+        {import.meta.env.VITE_MOCK !== '0' && <div className="muted" style={{ fontSize: 13 }}>浏览器演示模式始终直连 {sourceNames[f.type]}，代理播放需要使用 Jumedia 服务端。</div>}
       </div>
       <label className="row" style={{ gap: 16 }}><span className="grow"><b style={{ fontSize: 14, fontWeight: 600 }}>自动同步</b><div className="muted" style={{ fontSize: 13 }}>{f.auto_sync ? '保存后同步整库，之后定时同步新增和修改' : scope === 'web' ? '只保存连接，之后手动获取视频或同步整库' : '只保存连接，之后手动同步整库'}</div></span><Switch on={f.auto_sync} onChange={(auto_sync) => edit({ auto_sync })} /></label>
       <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
@@ -153,9 +155,9 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
     </form>
   )
   if (inline) return <section className="ds-card" style={{ border: '2px solid var(--brand)', gap: 16 }}><div className="row between"><h2 style={{ fontSize: 16, fontWeight: 800 }}>{value ? `编辑数据源 · ${value.name}` : '添加数据源'}</h2>{usage && <span className="faint" style={{ fontSize: 12 }}>{usage}</span>}</div>{body}</section>
-  return <Modal title={value ? `数据源设置 · ${value.name}` : '添加 Emby 数据源'} onClose={onClose} wide>{body}</Modal>
+  return <Modal title={value ? `数据源设置 · ${value.name}` : '添加数据源'} onClose={onClose} wide>{body}</Modal>
 }
 
 export function DataSourceEmpty({ onAdd, disabled }: { onAdd: () => void; disabled?: boolean }) {
-  return <Empty icon="box" title="还没有数据源" hint="连接你的 Emby 服务器，手动选片投稿或自动同步媒体库" action={!disabled && <button className="btn primary" onClick={onAdd}><Icon name="plus" size={15} />添加 Emby 数据源</button>} />
+  return <Empty icon="box" title="还没有数据源" hint="连接你的 Emby 或 Jellyfin 服务器，手动选片投稿或自动同步媒体库" action={!disabled && <button className="btn primary" onClick={onAdd}><Icon name="plus" size={15} />添加数据源</button>} />
 }
