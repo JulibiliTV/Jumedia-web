@@ -47,6 +47,7 @@ export function sourceBase(address: string, type: SourceType): string {
   if (!['http:', 'https:'].includes(u.protocol)) throw new SourceError('媒体服务器地址仅支持 http / https')
   if (u.username || u.password) throw new SourceError('媒体服务器地址格式不正确')
   const path = u.pathname.replace(/\/+$/, '')
+  if (type === 'fntv') return u.origin + (/\/v$/.test(path) ? path : path + '/v')
   return u.origin + (type === 'jellyfin' || /\/emby$/i.test(path) ? path : path + '/emby')
 }
 
@@ -70,6 +71,7 @@ async function call<T>(base: string, path: string, init?: RequestInit): Promise<
 }
 
 async function login(type: SourceType, url: string, username: string, password: string): Promise<Session> {
+  if (type === 'fntv') throw new SourceError('飞牛影视接入需要 Jumedia 服务端，请使用非 Mock 网页连接服务端')
   const base = sourceBase(url, type)
   if (!username.trim()) throw new SourceError('请填写用户名')
   const auth = await call<{ AccessToken?: string; User?: { Id: string } }>(base, '/Users/AuthenticateByName', {
@@ -318,7 +320,7 @@ export async function importSourceDrafts(db: DB, ds: DataSource, library: string
     const created = !a
     if (!a) {
       const aid = Math.max(100000, ...db.archives.map(a => a.aid)) + 1
-      a = { aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: Math.floor(Date.now() / 1000), pubdate: 0, state: -20, reason: '', copyright: 2, source: `${sourceNames[ds.type]} · ${ds.server_name || ds.name}`,
+      a = { aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: Math.floor(Date.now() / 1000), pubdate: 0, state: -20, reason: '', copyright: 2, source: `${sourceNames[ds.type]} ${ds.server_name || ds.name}`,
         pages: m.pages.map(p => ({ cid: nextID(), ...p })), chapters: [], subtitles: [], stat: { view: 0, danmaku: 0, reply: 0, favorite: 0, coin: 0, share: 0, like: 0 },
         origin: { type: ds.type, ds: ds.id, item: id, library: lib.id, locked: [], meta: m.meta } }
       db.archives.push(a)
@@ -387,7 +389,7 @@ export async function syncSource(db: DB, ds: DataSource, nextID: () => number): 
         } else {
           const aid = Math.max(100000, ...db.archives.map((x) => x.aid)) + 1
           const created: Archive = {
-            aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: m.ctime, pubdate: m.pubdate, state: auditRequired ? -1 : 0, reason: '', copyright: 2, source: `${sourceNames[ds.type]} · ${ds.server_name || ds.name}`,
+            aid, bvid: av2bv(aid), mid: ds.mid, ...m.meta, ctime: m.ctime, pubdate: m.pubdate, state: auditRequired ? -1 : 0, reason: '', copyright: 2, source: `${sourceNames[ds.type]} ${ds.server_name || ds.name}`,
             pages: m.pages.map((p) => ({ cid: nextID(), ...p })), chapters: [], subtitles: [],
             stat: { view: 0, danmaku: 0, reply: 0, favorite: 0, coin: 0, share: 0, like: 0 },
             origin: { type: ds.type, ds: ds.id, item: item.Id, library: lib.id, locked: [], meta: m.meta },

@@ -1804,7 +1804,8 @@ const anySource = (c: Ctx) => c.db.dataSources.find((x) => x.id === int(c.p.id))
 /** Address and credentials from the request; an empty password keeps the stored one unless `clear_password`. */
 function credentials(c: Ctx, existing: DataSource | undefined, system: boolean): { type: SourceType; url: string; username: string; password: string } {
   const type = c.p.type || existing?.type || 'emby'
-  if (type !== 'emby' && type !== 'jellyfin') return fail(-400, '不支持的数据源类型')
+  if (type !== 'emby' && type !== 'jellyfin' && type !== 'fntv') return fail(-400, '不支持的数据源类型')
+  if (type === 'fntv' && c.p.proxy_playback === 'false') return fail(-400, '飞牛影视需要通过 Jumedia 代理播放')
   if (existing && type !== existing.type) return fail(-400, '已保存的数据源不能更改类型')
   const url = (c.p.url ?? '').trim(), username = (c.p.username ?? '').trim()
   if (!url) fail(-400, `请填写 ${sourceNames[type]} 服务器地址`)

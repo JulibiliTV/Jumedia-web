@@ -636,7 +636,7 @@ export function DataSources() {
     <div className="row wrap" style={{ gap: 20, alignItems: 'flex-start' }}>
       <div className="stack" style={{ flex: '999 1 480px', minWidth: 0, gap: 16 }}>
         <div className="chead">
-          <div><h1>数据源</h1><p>以只读方式接入 Emby 或 Jellyfin，手动选择电影、剧集导入草稿，也可自动同步整个媒体库</p></div>
+          <div><h1>数据源</h1><p>以只读方式接入 Emby、Jellyfin 或飞牛影视，手动选择电影、剧集导入草稿，也可自动同步整个媒体库</p></div>
         </div>
         {!d.data.enabled && <div className="ds-card muted">站点暂未开放个人数据源，已添加的数据源仍会显示，但无法新增或同步。</div>}
         {list?.map((ds) => edit !== 'new' && edit?.id === ds.id
@@ -644,18 +644,18 @@ export function DataSources() {
           : <DataSourceCard key={ds.id} ds={ds} scope="web" onChanged={d.reload} onEdit={d.data.enabled ? () => setEdit(ds) : undefined} />)}
         {edit === 'new' || (!list?.length && d.data.enabled)
           ? <DataSourceEditor inline scope="web" usage={usage} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); d.reload() }} />
-          : d.data.enabled && <button type="button" className="ds-add" disabled={full} onClick={() => setEdit('new')}><Icon name="plus" size={16} />{full ? `最多 ${d.data.max} 个数据源` : `添加数据源 · ${usage}`}</button>}
+          : d.data.enabled && <button type="button" className="ds-add" disabled={full} onClick={() => setEdit('new')}><Icon name="plus" size={16} />{full ? `最多 ${d.data.max} 个数据源` : `添加数据源 ${usage}`}</button>}
       </div>
       <aside style={{ flex: '1 1 260px', maxWidth: 320, minWidth: 0, paddingTop: 70 }}>
         <section className="ds-card muted" style={{ gap: 12, padding: 16, fontSize: 13, lineHeight: 1.7 }}>
           <b style={{ fontSize: 15, color: 'var(--text)' }}>接入后会怎样</b>
-          <span>· 手动获取创建草稿，整库同步会创建合集</span>
-          <span>· 片名、简介、海报取自源媒体库</span>
-          <span>· 草稿由你投稿，整库同步按站点规则审核</span>
-          <span>· 标题修改仅保存在 Jumedia</span>
-          <span>· 只接入登录用户能看到的媒体库</span>
-          <span>· 移除数据源会同时下架它的全部视频</span>
-          {d.data.sync_hours > 0 && <span>· 开启自动同步时每 {d.data.sync_hours} 小时同步一次</span>}
+          <span>手动获取创建草稿，整库同步会创建合集</span>
+          <span>片名、简介、海报取自源媒体库</span>
+          <span>草稿由你投稿，整库同步按站点规则审核</span>
+          <span>标题修改仅保存在 Jumedia</span>
+          <span>只接入登录用户能看到的媒体库</span>
+          <span>移除数据源会同时下架它的全部视频</span>
+          {d.data.sync_hours > 0 && <span>开启自动同步时每 {d.data.sync_hours} 小时同步一次</span>}
         </section>
       </aside>
     </div>
