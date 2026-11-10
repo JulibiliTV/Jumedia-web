@@ -116,7 +116,7 @@ Mock 的 Emby 地址、用户名和密码随包保存在浏览器 DB，包中未
 
 ```text
 src/api/client.ts      请求层：参数排序、表单编码、请求签名、CSRF
-src/api/juli.ts        与 JulibiliTV 的 Jumedia 数据源一致的接口
+src/api/juli.ts        Jumedia 内容、播放与互动接口
 src/api/jumedia.ts     Jumedia 扩展接口：注册、上传、创作中心、管理后台等
 src/api/normalize.ts   把接口数据转换为页面使用的视频、番剧、直播、动态、评论模型
 src/api/protobuf.ts    弹幕的 protobuf 编解码
@@ -132,9 +132,9 @@ scripts/               演示媒体导入脚本
 
 `src/mock/` 是前后端共用的接口契约：路径、参数、错误码、提示文案和 JSON 结构都以它为准，Jumedia Server 按它实现。修改或新增接口时，先在 Mock 中实现，再同步到后端。
 
-接口与 JulibiliTV 的 Jumedia 数据源保持一致，电视客户端可以直接使用 Jumedia 作为数据源，因此：
+接口开发遵循以下约定：
 
-- JulibiliTV 已使用的接口只能新增字段，不能修改或删除已有字段。
+- 客户端已使用的接口只能新增字段，不能修改或删除已有字段。
 - 新增接口优先沿用相同风格的路径；无法对应的功能使用 `/x/jumedia/*`、`/x/admin/*` 等 Jumedia 专用路径。
 
 响应统一为 `{ code, message, ttl, data }`（番剧类接口为 `result`）。登录态保存在 Cookie `SESSDATA`、`bili_jct`、`DedeUserID` 中，写操作携带 `csrf` 参数；这些名称沿用 Jumedia 数据源的协议。

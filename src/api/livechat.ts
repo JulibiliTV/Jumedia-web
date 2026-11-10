@@ -1,8 +1,8 @@
 import * as juli from './juli'
 
 /**
- * Live chat over the WebSocket that `getDanmuInfo` describes — the same protocol
- * JulibiliTV speaks (`LiveChatProtocol.swift`). Each binary message holds packets
+ * Live chat over the WebSocket that `getDanmuInfo` describes.
+ * Each binary message holds packets
  * with a 16-byte big-endian header: size u32, header length u16 (16), version u16
  * (0 plain JSON, 2 zlib-compressed packets), operation u32, sequence u32.
  * Operations: 7 auth → 8 result, 2 heartbeat → 3 popularity, 5 commands.
