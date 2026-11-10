@@ -63,7 +63,7 @@ export function AdminLayout() {
     '/admin/archives': n ? `共 ${n.archives} 个已发布稿件 · ${n.pending} 个待审核` : '',
     '/admin/bangumi': n ? `${n.seasons} 部 · ${n.episodes} 集` : '',
     '/admin/live': n ? `${n.rooms} 个直播间 · ${n.live_now} 个直播中` : '',
-    '/admin/datasources': '以只读方式接入 Emby、Jellyfin 或飞牛影视，媒体库中的内容成为站内视频',
+    '/admin/datasources': '以只读方式接入 Emby、Jellyfin、飞牛影视或 Plex，媒体库中的内容成为站内视频',
     '/admin/users': n ? `共 ${n.users} 个用户 · ${n.banned} 个已封禁` : '',
     '/admin/moderation': n ? `今日新增评论 ${countText(n.reply_today ?? 0)} 条 · 弹幕 ${countText(n.danmaku_today ?? 0)} 条` : '',
     '/admin/regions': '分区用于投稿分类、频道页与排行榜；隐藏后不在前台展示。拖动左侧把手调整顺序。',

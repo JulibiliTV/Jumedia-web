@@ -119,11 +119,11 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
       <label className="stack" style={{ gap: 6 }}><span className="lbl">服务器地址</span><span className="inp"><input className="mono" style={{ fontSize: 13 }} value={f.url} placeholder={`https://${f.type}.example.com`} onChange={(e) => { edit({ url: e.target.value }); setProbe(null) }} required /></span></label>
       <div className="f2" style={{ gap: 16 }}>
         <label className="stack" style={{ gap: 6 }}><span className="lbl">用户名</span><span className="inp"><input value={f.username} autoComplete="off" onChange={(e) => { edit({ username: e.target.value }); setProbe(null) }} required /></span></label>
-        <label className="stack" style={{ gap: 6 }}><span className="lbl">密码</span><span className="inp"><input type="password" value={f.password} autoComplete="new-password" placeholder={value?.has_password ? '已保存，留空则不修改' : '没有密码可留空'} onChange={(e) => { edit({ password: e.target.value }); setProbe(null) }} /></span>
+        <label className="stack" style={{ gap: 6 }}><span className="lbl">密码</span><span className="inp"><input type="password" value={f.password} autoComplete="new-password" placeholder={value?.has_password ? '已保存，留空则不修改' : f.type === 'plex' ? '填写 Plex 账号密码' : '没有密码可留空'} onChange={(e) => { edit({ password: e.target.value }); setProbe(null) }} /></span>
           {value?.has_password && !f.password && <label className="check" style={{ fontSize: 12.5 }}><input type="checkbox" checked={clear} onChange={(e) => { setClear(e.target.checked); setProbe(null) }} />清除已保存的密码</label>}
         </label>
       </div>
-      <span className="faint" style={{ marginTop: -6, fontSize: 12 }}>{`使用 ${sourceNames[f.type]} 账号登录，以只读方式接入该账号可访问的媒体库。`}</span>
+      <span className="faint" style={{ marginTop: -6, fontSize: 12 }}>{f.type === 'plex' ? '使用 Plex 用户名或邮箱和密码登录，以只读方式接入该账号可访问的媒体库。' : `使用 ${sourceNames[f.type]} 账号登录，以只读方式接入该账号可访问的媒体库。`}</span>
       {error && <div className="ds-err">{error}</div>}
       {probe && !error && <div className="ds-ok"><Icon name="check" size={16} />连接成功，发现 {probe.libraries.length} 个媒体库{probe.server_name && ` ${probe.server_name}${probe.version ? ` ${probe.version}` : ''}`}</div>}
       {probe && (
@@ -145,7 +145,7 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
         <label className="check"><input type="checkbox" checked={f.proxy_playback} disabled={f.type === 'fntv'} onChange={(e) => edit({ proxy_playback: e.target.checked })} />通过 Jumedia 代理播放</label>
         <div className="muted" style={{ fontSize: 13 }}>{f.proxy_playback ? '视频流量经过 Jumedia 服务端。' : `播放器直接访问 ${sourceNames[f.type]}。播放链接会包含该账号的访问令牌。`}</div>
         {f.type === 'fntv' && <div className="muted" style={{ fontSize: 13 }}>飞牛影视由 Jumedia 代为认证并读取原文件，需要开启代理播放。</div>}
-        {import.meta.env.VITE_MOCK !== '0' && <div className="muted" style={{ fontSize: 13 }}>{f.type === 'fntv' ? `${sourceNames[f.type]} 接入请使用连接 Jumedia 服务端的网页。` : `浏览器演示模式始终直连 ${sourceNames[f.type]}，代理播放需要使用 Jumedia 服务端。`}</div>}
+        {import.meta.env.VITE_MOCK !== '0' && <div className="muted" style={{ fontSize: 13 }}>{['fntv', 'plex'].includes(f.type) ? `${sourceNames[f.type]} 接入请使用连接 Jumedia 服务端的网页。` : `浏览器演示模式始终直连 ${sourceNames[f.type]}，代理播放需要使用 Jumedia 服务端。`}</div>}
       </div>
       <label className="row" style={{ gap: 16 }}><span className="grow"><b style={{ fontSize: 14, fontWeight: 600 }}>自动同步</b><div className="muted" style={{ fontSize: 13 }}>{f.auto_sync ? '保存后同步整库，之后定时同步新增和修改' : scope === 'web' ? '只保存连接，之后手动获取视频或同步整库' : '只保存连接，之后手动同步整库'}</div></span><Switch on={f.auto_sync} onChange={(auto_sync) => edit({ auto_sync })} /></label>
       <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
@@ -160,5 +160,5 @@ export function DataSourceEditor({ scope, value, onClose, onSaved, inline, usage
 }
 
 export function DataSourceEmpty({ onAdd, disabled }: { onAdd: () => void; disabled?: boolean }) {
-  return <Empty icon="box" title="还没有数据源" hint="连接你的 Emby、Jellyfin 或飞牛影视 服务器，手动选片投稿或自动同步媒体库" action={!disabled && <button className="btn primary" onClick={onAdd}><Icon name="plus" size={15} />添加数据源</button>} />
+  return <Empty icon="box" title="还没有数据源" hint="连接你的 Emby、Jellyfin、飞牛影视或 Plex 服务器，手动选片投稿或自动同步媒体库" action={!disabled && <button className="btn primary" onClick={onAdd}><Icon name="plus" size={15} />添加数据源</button>} />
 }

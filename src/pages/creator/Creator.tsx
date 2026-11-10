@@ -636,7 +636,7 @@ export function DataSources() {
     <div className="row wrap" style={{ gap: 20, alignItems: 'flex-start' }}>
       <div className="stack" style={{ flex: '999 1 480px', minWidth: 0, gap: 16 }}>
         <div className="chead">
-          <div><h1>数据源</h1><p>以只读方式接入 Emby、Jellyfin 或飞牛影视，手动选择电影、剧集导入草稿，也可自动同步整个媒体库</p></div>
+          <div><h1>数据源</h1><p>以只读方式接入 Emby、Jellyfin、飞牛影视或 Plex，手动选择电影、剧集导入草稿，也可自动同步整个媒体库</p></div>
         </div>
         {!d.data.enabled && <div className="ds-card muted">站点暂未开放个人数据源，已添加的数据源仍会显示，但无法新增或同步。</div>}
         {list?.map((ds) => edit !== 'new' && edit?.id === ds.id

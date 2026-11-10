@@ -47,6 +47,7 @@ export function sourceBase(address: string, type: SourceType): string {
   if (!['http:', 'https:'].includes(u.protocol)) throw new SourceError('媒体服务器地址仅支持 http / https')
   if (u.username || u.password) throw new SourceError('媒体服务器地址格式不正确')
   const path = u.pathname.replace(/\/+$/, '')
+  if (type === 'plex') return u.origin + path
   if (type === 'fntv') return u.origin + (/\/v$/.test(path) ? path : path + '/v')
   return u.origin + (type === 'jellyfin' || /\/emby$/i.test(path) ? path : path + '/emby')
 }
@@ -71,6 +72,7 @@ async function call<T>(base: string, path: string, init?: RequestInit): Promise<
 }
 
 async function login(type: SourceType, url: string, username: string, password: string): Promise<Session> {
+  if (type === 'plex') throw new SourceError('Plex 接入需要 Jumedia 服务端，请使用非 Mock 网页连接服务端')
   if (type === 'fntv') throw new SourceError('飞牛影视接入需要 Jumedia 服务端，请使用非 Mock 网页连接服务端')
   const base = sourceBase(url, type)
   if (!username.trim()) throw new SourceError('请填写用户名')
