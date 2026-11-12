@@ -69,7 +69,7 @@ export function feedCard(a: Archive) {
     args: { up_id: a.mid, up_name: owner(a.mid).name, rid: a.tid, rname: regionName(a.tid), aid: a.aid },
     player_args: { aid: a.aid, cid: a.pages[0]?.cid, type: 'av', duration: totalDuration(a) },
     bvid: a.bvid, pubdate: a.pubdate, owner: owner(a.mid),
-    three_point: { dislike_reasons: [{ id: 1, name: '不感兴趣' }, { id: 4, name: `UP主：${owner(a.mid).name}` }, { id: 3, name: `分区：${regionName(a.tid)}` }] },
+    three_point: { dislike_reasons: [{ id: 1, name: '不感兴趣' }, { id: 4, name: `UP主：${owner(a.mid).name}` }] },
   }
 }
 

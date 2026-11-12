@@ -100,6 +100,7 @@ export interface DB {
   dandanplay?: Record<number, { sync: import('../api/jumedia').DanmakuSync; comments: Danmaku[]; attemptedAt?: number }>
   commentReports?: { mid: number; rpid: number; reason: string; content?: string; status: 'pending' | 'dismissed' | 'removed'; ctime: number }[]
   userBlocks?: { mid: number; fid: number; ctime: number }[]
+  recommendationFeedback?: { mid: number; reason_id: 1 | 4; target_id: number; ctime: number }[]
   relations: { mid: number; fid: number; mtime: number }[]; likes: { mid: number; aid: number }[]; dislikes: { mid: number; aid: number }[]; coins: { mid: number; aid: number; n: number }[]
   favFolders: FavFolder[]; history: { mid: number; aid: number; cid: number; epid?: number; sid?: number; view_at: number; progress: number }[]
   historyPaused: number[]; toview: { mid: number; aid: number; add_at: number }[]

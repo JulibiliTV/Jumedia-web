@@ -2,7 +2,7 @@ import { accessKey, bytes, bytesResponse, csrf, data, envelope, post } from './c
 import { decodeSegment, decodeWebView, remoteParameters, type DanmakuSettings } from './protobuf'
 
 /**
- * Every endpoint Juli's `BiliAPIClient` calls, with the same path, host,
+ * Endpoints shared with JulibiliTV, with the same path, host,
  * method and parameter names. Comments name the Swift method each mirrors so
  * the two stay in step. Responses are returned as delivered (`data`/`result`).
  */
@@ -19,8 +19,11 @@ export function feedIndex(page: number) { // fetchRecommendations
   const key = accessKey()
   return data('app', '/x/v2/feed/index', { idx: Math.max(0, (page - 1) * 20), pull: page === 1 ? 0 : 1, column: 4, device: 'pad', platform: 'ios', access_key: key || undefined }, { app: true })
 }
-export const feedDislike = (p: { goto: string; id: number; reason_id: number }) => // submitRecommendationFeedback
-  data('app', '/x/feed/dislike', { access_key: accessKey(), goto: p.goto, id: p.id, reason_id: p.reason_id, build: 1, platform: 'ios' }, { app: true })
+type RecommendationFeedback = { goto: 'av'; id: number; mid?: number; reason_id: 1 | 4; track_id?: string }
+export const feedDislike = (p: RecommendationFeedback) => // submitRecommendationFeedback
+  post('api', '/x/web-interface/feedback/dislike', { ...csrf(), ...p })
+export const cancelFeedDislike = (p: RecommendationFeedback) =>
+  post('api', '/x/web-interface/feedback/dislike/cancel', { ...csrf(), ...p })
 export const popular = (pn: number) => data('api', '/x/web-interface/popular', { pn, ps: 20 }) // fetchPopular
 export const ranking = (rid: number) => data('api', '/x/web-interface/ranking/v2', { rid, type: 'all' }) // fetchRanking
 export const regionList = () => data('api', '/x/web-interface/region/list') // fetchRankingCategories

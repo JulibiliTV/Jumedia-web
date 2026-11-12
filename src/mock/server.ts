@@ -22,7 +22,7 @@ import { archiveById, arcView, compactCount, feedCard, followerCount, followingC
  */
 
 type P = Record<string, string>
-interface Ctx { p: P; method: string; form?: FormData; me?: User; db: DB; origin: string }
+interface Ctx { p: P; method: string; form?: FormData; me?: User; session?: DB['sessions'][number]; db: DB; origin: string }
 type Handler = (c: Ctx) => unknown | Promise<unknown>
 
 class Fail { constructor(public code: number, public message: string, public data: unknown = null) {} }
@@ -43,6 +43,37 @@ function csrf(c: Ctx): User {
   const session = c.db.sessions.find((s) => s.mid === u.mid && s.csrf === (c.p.csrf || c.p.biliCSRF))
   if (!session) fail(-111, 'csrf 校验失败')
   return u
+}
+function recommendationFeedback(c: Ctx, cancel = false, legacy = false) {
+  const u = login(c)
+  const accessAuth = legacy && !!c.p.access_key && c.p.access_key === c.session?.access
+  if (!accessAuth && (!c.session || !(c.p.csrf || c.p.biliCSRF) || (c.p.csrf || c.p.biliCSRF) !== c.session.csrf)) fail(-111, 'csrf 校验失败')
+  if (c.method !== 'POST' && !(accessAuth && c.method === 'GET')) fail(-405, '请求方法不支持')
+  // Promotion acknowledgements do not create recommendation preferences.
+  if (!legacy && c.p.goto === 'ad') return null
+  if (c.p.goto !== 'av') fail(-400, '推荐目标类型不支持')
+  if (c.p.reason_id !== '1' && c.p.reason_id !== '4') fail(-400, '推荐反馈原因不支持')
+  const reason = Number(c.p.reason_id) as 1 | 4
+  const aid = Number(c.p.id)
+  if (!/^[+]?\d+$/.test(c.p.id ?? '') || !Number.isSafeInteger(aid) || aid <= 0) fail(-400, '视频 ID 无效')
+  const a = c.db.archives.find((a) => a.aid === aid)
+  if (!a) fail(-404, '视频不存在')
+  if (c.p.mid) {
+    const mid = Number(c.p.mid)
+    if (!/^[+]?\d+$/.test(c.p.mid) || !Number.isSafeInteger(mid) || mid < 0 || (mid !== 0 && mid !== a!.mid)) fail(-400, '作者与视频不匹配')
+  }
+  const target = reason === 4 ? a!.mid : aid
+  const records = c.db.recommendationFeedback ??= []
+  const matches = (r: typeof records[number]) => r.mid === u.mid && r.reason_id === reason && r.target_id === target
+  if (cancel) c.db.recommendationFeedback = records.filter((r) => !matches(r))
+  else if (!records.some(matches)) records.push({ mid: u.mid, reason_id: reason, target_id: target, ctime: ts() })
+  return null
+}
+function recommendationCandidates(c: Ctx) {
+  const preferences = (c.db.recommendationFeedback ?? []).filter((r) => r.mid === c.me?.mid)
+  const videos = new Set(preferences.filter((r) => r.reason_id === 1).map((r) => r.target_id))
+  const authors = new Set(preferences.filter((r) => r.reason_id === 4).map((r) => r.target_id))
+  return published(c.db).filter((a) => !videos.has(a.aid) && !authors.has(a.mid))
 }
 function admin(c: Ctx): User {
   const u = c.method === 'GET' ? login(c) : csrf(c)
@@ -388,22 +419,22 @@ const routes: Record<string, Handler> = {
   '/x/v2/feed/index': (c) => {
     const idx = int(c.p.idx)
     // The TV home feed: archives whose uploader turned off TV recommendation are left out.
-    const list = published(c.db).filter((a) => !a.no_tv)
+    const list = recommendationCandidates(c).filter((a) => !a.no_tv)
     const mixed = [...list].sort((a, b) => ((a.aid * 2654435761 + idx) % 1000) - ((b.aid * 2654435761 + idx) % 1000))
-    const items = Array.from({ length: 20 }, (_, i) => mixed[(idx + i) % mixed.length]).map(feedCard)
+    const items = Array.from({ length: mixed.length ? 20 : 0 }, (_, i) => mixed[(idx + i) % mixed.length]).map(feedCard)
     if (c.me) {
       const follows = new Set(c.db.relations.filter((r) => r.mid === c.me!.mid).map((r) => r.fid))
       for (const it of items) if (follows.has(it.args.up_id)) Object.assign(it, { rcmd_reason: { content: '已关注' } })
     }
     return { items, config: { column: 4 } }
   },
-  '/x/feed/dislike': () => null,
+  '/x/feed/dislike': (c) => recommendationFeedback(c, false, true),
   // The web home feed; unlike `/x/v2/feed/index` it includes every published archive.
   '/x/web-interface/wbi/index/top/feed/rcmd': (c) => {
     const idx = Math.max(0, int(c.p.fresh_idx, 1) - 1) * int(c.p.ps, 12), ps = int(c.p.ps, 12)
-    const list = published(c.db)
+    const list = recommendationCandidates(c)
     const mixed = [...list].sort((a, b) => ((a.aid * 2654435761 + idx) % 1000) - ((b.aid * 2654435761 + idx) % 1000))
-    const item = Array.from({ length: Math.min(ps, mixed.length) }, (_, i) => mixed[(idx + i) % mixed.length]).map((a) => ({ ...arcView(a), id: a.aid, goto: 'av', uri: `/video/${a.bvid}`, is_followed: !!c.me && c.db.relations.some((r) => r.mid === c.me!.mid && r.fid === a.mid) ? 1 : 0 }))
+    const item = Array.from({ length: Math.min(ps, mixed.length) }, (_, i) => mixed[(idx + i) % mixed.length]).map((a) => ({ ...arcView(a), id: a.aid, goto: 'av', uri: `/video/${a.bvid}`, dislike_switch: !!c.me, is_followed: !!c.me && c.db.relations.some((r) => r.mid === c.me!.mid && r.fid === a.mid) ? 1 : 0 }))
     return { item, mid: c.me?.mid ?? 0 }
   },
   '/x/web-interface/popular': (c) => {
@@ -430,8 +461,8 @@ const routes: Record<string, Handler> = {
       duration: formatDuration(a.pages.reduce((s, p) => s + p.duration, 0)), badgepay: false, pts: score(a),
     }))
   },
-  // Promoted-card feedback. Jumedia serves no promotions, so this only acknowledges.
-  '/x/web-interface/feedback/dislike': (c) => { csrf(c); return null },
+  '/x/web-interface/feedback/dislike': (c) => recommendationFeedback(c),
+  '/x/web-interface/feedback/dislike/cancel': (c) => recommendationFeedback(c, true),
   // `children` (sub-regions) is a Jumedia extension; Juli reads only tid/name/id.
   '/x/web-interface/region/list': (c) => visibleRegions(c.db).map((r) => ({ tid: r.tid, name: r.name, id: r.tid, children: subRegions(c.db, r.tid).map((x) => ({ tid: x.tid, name: x.name, id: x.tid })) })),
   '/pgc/web/rank/list': (c) => ({ __result: { list: c.db.seasons.filter((s) => s.state === 0 && s.season_type === int(c.p.season_type, 1)).sort((a, b) => b.views - a.views).map((s, i) => seasonCard(s, { rank: i + 1 })), note: '根据播放、追番、互动数据综合计算' } }),
@@ -2295,7 +2326,7 @@ export async function installMockServer() {
     let body: unknown
     try {
       // The admin's public origin (`serverPublicOrigin`) replaces the page origin in generated addresses.
-      const out = (await handler({ p, method, form, me, db, origin: String(db.settings.serverPublicOrigin || '') || location.origin })) as Record<string, unknown> | null
+      const out = (await handler({ p, method, form, me, session, db, origin: String(db.settings.serverPublicOrigin || '') || location.origin })) as Record<string, unknown> | null
       save()
       if (out && typeof out === 'object' && '__bytes' in out) return new Response(out.__bytes as Uint8Array, { headers: { 'Content-Type': 'application/octet-stream', ...(out.__headers as Record<string, string> ?? {}) } })
       if (out && typeof out === 'object' && '__text' in out) return new Response(out.__text as string, { status: (out.__status as number) ?? 200, headers: { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-cache' } })
