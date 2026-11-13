@@ -56,7 +56,7 @@ npm run check:bundle -- --production
 
 产物在 `dist/`。最简单的部署方式是由后端直接提供：启动 Jumedia Server 时设置 `JUMEDIA_WEB_DIR=../Jumedia-web/dist`。也可以用任意静态服务器托管 `dist/`，此时需要把接口路径反向代理到后端，并把未命中的路径回退到 `index.html`。
 
-Docker 部署使用镜像 `ghcr.io/julibilitv/jumedia-web`（推送到 `main` 后由 GitHub Actions 构建）。它只包含构建好的网页文件：容器运行时把文件复制到 `/web` 卷后退出，由挂载同一个卷的 Jumedia Server 提供，编排见 Jumedia-server 的 `deploy/compose.yaml`。只发布网页端时不需要重启后端：
+Docker 部署使用镜像 `ghcr.io/jumedia/jumedia-web`（推送到 `main` 后由 GitHub Actions 构建）。它只包含构建好的网页文件：容器运行时把文件复制到 `/web` 卷后退出，由挂载同一个卷的 Jumedia Server 提供，编排见 Jumedia-server 的 `deploy/compose.yaml`。只发布网页端时不需要重启后端：
 
 ```sh
 docker compose pull web && docker compose up web
