@@ -4,7 +4,7 @@
 //   EMBY_URL=https://emby.example.test EMBY_USER=test EMBY_PASSWORD= node scripts/import-emby.mjs
 //
 // Only direct-play items are kept (MP4/M4V/MOV, H.264 video, AAC/MP3 audio), so
-// browsers and JulibiliTV can play them without transcoding. Images are referenced
+// browsers and JumediaTV can play them without transcoding. Images are referenced
 // by Emby's public image URLs; no media is copied and no token is written.
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'

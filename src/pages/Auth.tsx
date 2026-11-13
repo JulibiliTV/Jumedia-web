@@ -14,7 +14,7 @@ function Art() {
   return (
     <div className="auth-art">
       <div className="mosaic">{pics.data?.map((it) => <img key={it.id} src={it.cover} alt="" />)}</div>
-      <div><h2>记录、分享，<br />发现有趣的视频世界</h2><p>注册 Jumedia 账号，投稿你的作品、追番、看直播、与创作者互动。同一账号可在 JulibiliTV 上扫码登录。</p></div>
+      <div><h2>记录、分享，<br />发现有趣的视频世界</h2><p>注册 Jumedia 账号，投稿你的作品、追番、看直播、与创作者互动。同一账号可在 JumediaTV 上扫码登录。</p></div>
     </div>
   )
 }
@@ -130,7 +130,7 @@ export function TvLogin() {
       <div className="panel qr-box">
         <div className="tv"><Icon name="tv" size={44} /></div>
         {!code ? (
-          <><h2>在电视上登录</h2><p className="muted">打开 JulibiliTV，选择 Jumedia 数据源并扫描屏幕上的二维码即可登录。</p></>
+          <><h2>在电视上登录</h2><p className="muted">打开 JumediaTV，选择 Jumedia 数据源并扫描屏幕上的二维码即可登录。</p></>
         ) : state === 'done' ? (
           <><h2 style={{ color: 'var(--success)' }}>登录成功</h2><p className="muted">电视端将自动完成登录，可以关闭此页面了。</p><Link to="/" className="btn">返回首页</Link></>
         ) : state === 'error' ? (
@@ -139,7 +139,7 @@ export function TvLogin() {
           <>
             <h2>确认在电视上登录？</h2>
             <div className="row" style={{ gap: 12 }}><Avatar src={me.face} size={44} /><div style={{ textAlign: 'left' }}><b>{me.uname}</b><div className="faint" style={{ fontSize: 12 }}>UID {me.mid}</div></div></div>
-            <p className="muted" style={{ fontSize: 13 }}>设备：JulibiliTV（Apple TV）· 会话 {code.slice(0, 8)}…<br />如果不是你本人操作，请勿确认。</p>
+            <p className="muted" style={{ fontSize: 13 }}>设备：JumediaTV（Apple TV） 会话 {code.slice(0, 8)}…<br />如果不是你本人操作，请勿确认。</p>
             <div className="row" style={{ width: '100%' }}><Link to="/" className="btn lg grow">取消</Link><button className="btn primary lg grow" onClick={confirm} disabled={state !== 'scanned' || !cookie('bili_jct')}>确认登录</button></div>
           </>
         )}

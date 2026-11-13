@@ -855,7 +855,7 @@ function ServiceSettings({ f, setF }: { f: Record<string, any>; setF: (f: Record
   return (
     <div className="panel set-sec">
       <div className="panel-title"><h3>服务分布</h3></div>
-      <p className="faint" style={{ fontSize: 13, marginTop: 0 }}>客户端（如 JulibiliTV）启动时从 <span className="mono" style={{ color: 'var(--text)' }}>/x/jumedia/service</span> 读取这些地址，按用途访问对应的服务。留空表示使用本站地址。</p>
+      <p className="faint" style={{ fontSize: 13, marginTop: 0 }}>客户端（如 JumediaTV）启动时从 <span className="mono" style={{ color: 'var(--text)' }}>/x/jumedia/service</span> 读取这些地址，按用途访问对应的服务。留空表示使用本站地址。</p>
       <div className="stack">
         <div className="form-grid">
           {SERVICE_FIELDS.map(([k, label, hint]) => (

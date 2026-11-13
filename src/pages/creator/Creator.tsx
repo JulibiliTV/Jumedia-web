@@ -374,7 +374,7 @@ function UploadForm() {
             <span className="faint" style={{ fontSize: 12 }}>{Number.isFinite(dtime) && dtime ? `审核通过后，将在 ${new Date(dtime * 1000).getMonth() + 1} 月 ${new Date(dtime * 1000).getDate()} 日 ${schedule.clock} 自动发布` : '请选择发布时间'}</span>
           </span>}
           <span className="row" style={{ gap: 12 }}><span className="stack grow"><span style={{ fontSize: 14 }}>同步到动态</span><span className="faint" style={{ fontSize: 12 }}>粉丝会在动态里看到</span></span><Switch label="同步到动态" on={!form.no_disturbance} onChange={(v) => setForm({ ...form, no_disturbance: v ? 0 : 1 })} /></span>
-          <span className="row" style={{ gap: 12 }}><span className="stack grow"><span style={{ fontSize: 14 }}>推荐到电视端</span><span className="faint" style={{ fontSize: 12 }}>JulibiliTV 首页可推荐</span></span><Switch label="推荐到电视端" on={!form.no_tv} onChange={(v) => setForm({ ...form, no_tv: v ? 0 : 1 })} /></span>
+          <span className="row" style={{ gap: 12 }}><span className="stack grow"><span style={{ fontSize: 14 }}>推荐到电视端</span><span className="faint" style={{ fontSize: 12 }}>JumediaTV 首页可推荐</span></span><Switch label="推荐到电视端" on={!form.no_tv} onChange={(v) => setForm({ ...form, no_tv: v ? 0 : 1 })} /></span>
           <span className="stack" style={{ gap: 6 }}><span style={{ fontSize: 14 }}>加入合集</span>
             <span className="inp" style={{ height: 36, fontSize: 13 }}><select value={form.season_id} onChange={(e) => setForm({ ...form, season_id: +e.target.value })}><option value={0}>不加入合集</option>{(seasons.data ?? []).filter((x: any) => !x.origin).map((x: any) => <option key={x.id} value={x.id}>{x.title}</option>)}</select></span>
           </span>

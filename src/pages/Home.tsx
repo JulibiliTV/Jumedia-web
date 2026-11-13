@@ -93,7 +93,7 @@ export default function Home() {
   useTitle()
   const { site } = useSession()
   const feed = useInfinite(async (page: number) => {
-    // The web home uses the web feed; `/x/v2/feed/index` is the TV (JulibiliTV) feed.
+    // The web home uses the web feed; `/x/v2/feed/index` is the TV (JumediaTV) feed.
     const d = await jm.homeRcmd(page)
     return { items: compact<VideoItem>((d.item ?? []).map(videoItem)), next: page < 8 ? page + 1 : null }
   }, 1, [])

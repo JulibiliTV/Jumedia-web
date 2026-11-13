@@ -141,7 +141,7 @@ function UserMenu({ onClose }: { onClose: () => void }) {
       {item('/creator', 'chart', '创作中心')}
       {me.role === 'admin' && item('/admin', 'shield', '管理后台')}
       <div className="sep" />
-      {item('/tv-login', 'tv', '电视扫码登录', 'JulibiliTV')}
+      {item('/tv-login', 'tv', '电视扫码登录', 'JumediaTV')}
       {item('/account/settings', 'settings', '账号设置')}
       <div className="theme">
         <Icon name={theme === 'dark' ? 'moon' : 'sun'} size={18} />外观
@@ -267,7 +267,7 @@ export function Sidebar({ home = false }: { home?: boolean }) {
       {home ? <HomeExtras /> : <FollowedUps />}
       <div className="tv">
         <b><Icon name="tv" size={16} />在电视上看</b>
-        <p>用 JulibiliTV 扫码登录，历史记录和追番会自动同步。</p>
+        <p>用 JumediaTV 扫码登录，历史记录和追番会自动同步。</p>
         <Link to="/tv-login">电视扫码登录</Link>
       </div>
       <div className="foot">

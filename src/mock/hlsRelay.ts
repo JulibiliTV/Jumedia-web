@@ -8,7 +8,7 @@
  * - A VOD source is replayed on the wall clock from the moment the room went
  *   live: each request returns a sliding window of the segments "on air", with
  *   `EXT-X-MEDIA-SEQUENCE` advancing and an `EXT-X-DISCONTINUITY` at every loop,
- *   so every client (web or JulibiliTV) sees the same live edge.
+ *   so every client (web or JumediaTV) sees the same live edge.
  *
  * Jumedia-server should implement the same rules; this module has no browser
  * dependencies so it can be ported directly.

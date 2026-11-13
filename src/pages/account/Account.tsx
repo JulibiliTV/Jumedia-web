@@ -68,7 +68,7 @@ export function History() {
       <div className="row wrap" style={{ gap: 8 }}>
         <div className="chips-b">{([['', '全部'], ['archive', '视频'], ['pgc', '番剧']] as const).map(([v, label]) => <button type="button" key={v} className={kind === v ? 'on' : ''} onClick={() => setKind(v)}>{label}</button>)}</div>
         <span className="grow" />
-        <span className="row muted" style={{ gap: 6, fontSize: 13 }}><Icon name="tv" size={15} />{paused.data ? '已暂停记录，新的观看不会被保存' : '已与 JulibiliTV 同步'}</span>
+        <span className="row muted" style={{ gap: 6, fontSize: 13 }}><Icon name="tv" size={15} />{paused.data ? '已暂停记录，新的观看不会被保存' : '已与 JumediaTV 同步'}</span>
       </div>
       {feed.error ? <ErrorState error={feed.error} retry={feed.reload} /> : !feed.loading && !shown.length ? (term ? <Empty title={`没有找到“${q.trim()}”相关的记录`} icon="search" /> : <Empty title="还没有观看记录" icon="history" />) : (
         [...groups].map(([day, list]) => (
@@ -234,7 +234,7 @@ export function MyBangumi() {
   return (
     <div className="stack" style={{ gap: 20 }}>
       <div className="row wrap" style={{ alignItems: 'flex-end', gap: 12 }}>
-        <div className="stack" style={{ gap: 4 }}><h1 className="mb-h1">我的{word}</h1><span className="muted" style={{ fontSize: 14 }}>共 {all.length} 部{fresh ? ` · ${fresh} 部有更新` : ''} · 进度与 JulibiliTV 同步</span></div>
+        <div className="stack" style={{ gap: 4 }}><h1 className="mb-h1">我的{word}</h1><span className="muted" style={{ fontSize: 14 }}>共 {all.length} 部{fresh ? ` ${fresh} 部有更新` : ''} 进度与 JumediaTV 同步</span></div>
         <span className="grow" />
         <span className="pill-seg">{([[1, '追番'], [2, '追剧']] as const).map(([k, l]) => <button type="button" key={k} className={kind === k ? 'on' : ''} onClick={() => { setStatus(0); setParams(k === 2 ? { type: '2' } : {}) }}>{l}</button>)}</span>
       </div>
@@ -399,7 +399,7 @@ export function Settings() {
       </form>
 
       <div className="panel">
-        <div className="panel-title"><h3>弹幕偏好</h3><span className="faint" style={{ fontSize: 13 }}>在网页与 JulibiliTV 之间同步</span></div>
+        <div className="panel-title"><h3>弹幕偏好</h3><span className="faint" style={{ fontSize: 13 }}>在网页与 JumediaTV 之间同步</span></div>
         <div className="form-grid">
           {([['enabled', '显示弹幕'], ['showScroll', '滚动弹幕'], ['showTop', '顶部弹幕'], ['showBottom', '底部弹幕'], ['showColor', '彩色弹幕'], ['smartFilter', '智能屏蔽'], ['avoidSubtitles', '防挡字幕'], ['avoidPeople', '防挡人像']] as const).map(([k, label]) => (
             <label key={k} className="row between" style={{ height: 36 }}><span>{label}</span><Switch on={dm[k]} onChange={(v) => saveDm({ [k]: v })} /></label>
@@ -420,7 +420,7 @@ export function Settings() {
       </form>
 
       <div className="panel row between">
-        <div><h3 style={{ fontSize: 16 }}>在电视上登录</h3><p className="faint" style={{ fontSize: 13, marginTop: 4 }}>在 JulibiliTV 选择 Jumedia 数据源，用手机打开电视上的二维码链接即可确认登录。</p></div>
+        <div><h3 style={{ fontSize: 16 }}>在电视上登录</h3><p className="faint" style={{ fontSize: 13, marginTop: 4 }}>在 JumediaTV 选择 Jumedia 数据源，用手机打开电视上的二维码链接即可确认登录。</p></div>
         <Link to="/tv-login" className="btn"><Icon name="qr" size={16} />扫码登录说明</Link>
       </div>
     </div>

@@ -2,7 +2,7 @@ import { accessKey, bytes, bytesResponse, csrf, data, envelope, post } from './c
 import { decodeSegment, decodeWebView, remoteParameters, type DanmakuSettings } from './protobuf'
 
 /**
- * Endpoints shared with JulibiliTV, with the same path, host,
+ * Endpoints shared with JumediaTV, with the same path, host,
  * method and parameter names. Comments name the Swift method each mirrors so
  * the two stay in step. Responses are returned as delivered (`data`/`result`).
  */

@@ -16,7 +16,7 @@ import { archiveById, arcView, compactCount, feedCard, followerCount, followingC
  *
  * Image fields (`pic`, `cover`, `face`, `top_photo`, banners…) are always
  * http(s) or site-relative URLs of raster images (JPEG/PNG/WebP/GIF), never
- * `data:` URIs: JulibiliTV decodes them with UIImage, needs an HTTP response,
+ * `data:` URIs: JumediaTV decodes them with UIImage, needs an HTTP response,
  * and its bangumi carousel accepts only https. Demo media comes from the Emby
  * catalog (see `emby.ts`); a real server returns these as absolute URLs.
  */
@@ -139,7 +139,7 @@ function playurlPayload(media: string, duration: number, qn: number, format = 'm
   }
 }
 
-/** Raster images only (what browsers and JulibiliTV's UIImage can decode). */
+/** Raster images only (what browsers and JumediaTV's UIImage can decode). */
 async function rasterImage(file: File): Promise<boolean> {
   const head = new Uint8Array(await file.slice(0, 12).arrayBuffer())
   const at = (o: number, bytes: number[]) => bytes.every((b, i) => head[o + i] === b)
